@@ -1,1 +1,83 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Atlas MC - Início</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', sans-serif; }
+  body {
+    height: 100vh;
+    background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: #fff;
+    overflow: hidden;
+  }
+  .container {
+    text-align: center;
+    background: rgba(0,0,0,0.5);
+    padding: 60px 80px;
+    border-radius: 20px;
+    border: 2px solid #00e5ff;
+    box-shadow: 0 0 40px #00e5ff, inset 0 0 20px rgba(0,229,255,0.3);
+    animation: fadeIn 1.2s ease;
+  }
+  h1 {
+    font-size: 4rem;
+    letter-spacing: 4px;
+    background: linear-gradient(90deg, #00e5ff, #a020f0);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-shadow: 0 0 20px rgba(0,229,255,0.5);
+  }
+  p { margin: 20px 0 30px; font-size: 1.2rem; color: #ccc; }
+  .ip {
+    display: inline-block;
+    background: #111;
+    padding: 12px 25px;
+    border-radius: 10px;
+    font-family: monospace;
+    font-size: 1.3rem;
+    color: #00e5ff;
+    border: 1px solid #00e5ff;
+    cursor: pointer;
+    transition: 0.3s;
+  }
+  .ip:hover { background: #00e5ff; color: #111; }
+  .btn {
+    display: block;
+    margin: 25px auto 0;
+    padding: 15px 40px;
+    background: linear-gradient(90deg, #00e5ff, #a020f0);
+    border: none;
+    border-radius: 50px;
+    color: #fff;
+    font-size: 1.1rem;
+    font-weight: bold;
+    cursor: pointer;
+    transition: 0.3s;
+  }
+  .btn:hover { transform: scale(1.05); box-shadow: 0 0 25px #a020f0; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(30px);} to { opacity: 1; transform: translateY(0);} }
+</style>
+</head>
+<body>
+  <div class="container">
+    <h1>ATLAS MC</h1>
+    <p>A tua aventura épica começa aqui ⚔️</p>
+    <div class="ip" onclick="copiarIP()">play.atlasmc.com</div>
+    <button class="btn" onclick="entrar()">ENTRAR NO SERVIDOR</button>
+  </div>
 
+<script>
+  function copiarIP() {
+    navigator.clipboard.writeText("play.atlasmc.com");
+    alert("IP copiado: play.atlasmc.com");
+  }
+  function entrar() {
+    window.location.href = "https://discord.gg/atlasmc"; // muda para teu link
+  }
+</script>
+</body>
+</html>
