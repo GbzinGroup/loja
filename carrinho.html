@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Atlas MC - Carrinho</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<nav>
+  <div class="logo">⚔ ATLAS MC</div>
+  <ul>
+    <li><a href="index.html">GBzin</a></li>
+    <li><a href="kits.html">Kits</a></li>
+    <li><a href="ranks.html">Ranks</a></li>
+    <li><button class="cart-btn">🛒 (<span id="contador">0</span>)</button></li>
+  </ul>
+</nav>
+
+<header>
+  <h1>🛒 O Teu Carrinho</h1>
+  <p>Confirma os teus itens antes de finalizar</p>
+</header>
+
+<div class="carrinho-container">
+  <div id="itens-carrinho"></div>
+  <div class="total" id="total">Total: R$ 0,00</div>
+  <button class="btn-finalizar" onclick="finalizar()">✅ Finalizar Compra</button>
+</div>
+
+<footer>© 2026 Atlas MC - Todos os direitos reservados</footer>
+
+<script src="js/carrinho.js"></script>
+<script>
+  renderCarrinho();
+</script>
+</body>
+</html>
