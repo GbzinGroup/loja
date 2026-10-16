@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Atlas MC - Ranks</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<nav>
+  <div class="logo">⚔ ATLAS MC</div>
+  <ul>
+    <li><a href="index.html">GBzin</a></li>
+    <li><a href="kits.html">Kits</a></li>
+    <li><a href="ranks.html" class="active">Ranks</a></li>
+    <li><button class="cart-btn" onclick="location.href='carrinho.html'">🛒 (<span id="contador">0</span>)</button></li>
+  </ul>
+</nav>
+
+<header>
+  <h1>👑 Ranks VIP</h1>
+  <p>Torna-te uma lenda no Atlas MC com vantagens exclusivas!</p>
+</header>
+
+<div class="produtos">
+
+  <div class="card">
+    <div class="icone">🥉</div>
+    <h3>VIP Bronze</h3>
+    <p>Tag exclusiva, /fly no spawn, 1 home extra.</p>
+    <div class="preco">R$ 15<small>,00</small></div>
+    <button class="btn-comprar" onclick="addCarrinho('VIP Bronze', 15)">Comprar</button>
+  </div>
+
+  <div class="card">
+    <div class="icone">🥈</div>
+    <h3>VIP Prata</h3>
+    <p>Tudo do Bronze + 3 homes, /heal, kit VIP.</p>
+    <div class="preco">R$ 30<small>,00</small></div>
+    <button class="btn-comprar" onclick="addCarrinho('VIP Prata', 30)">Comprar</button>
+  </div>
+
+  <div class="card">
+    <div class="badge">POPULAR</div>
+    <div class="icone">🥇</div>
+    <h3>VIP Ouro</h3>
+    <p>Tudo do Prata + 5 homes, /ec, kit VIP+, tag dourada.</p>
+    <div class="preco">R$ 60<small>,00</small></div>
+    <button class="btn-comprar" onclick="addCarrinho('VIP Ouro', 60)">Comprar</button>
+  </div>
+
+  <div class="card">
+    <div class="icone">💎</div>
+    <h3>VIP Diamante</h3>
+    <p>Tudo do Ouro + 10 homes, /nick, partículas exclusivas.</p>
+    <div class="preco">R$ 120<small>,00</small></div>
+    <button class="btn-comprar" onclick="addCarrinho('VIP Diamante', 120)">Comprar</button>
+  </div>
+
+  <div class="card">
+    <div class="badge">MÁXIMO</div>
+    <div class="icone">👑</div>
+    <h3>VIP Lendário</h3>
+    <p>Acesso total: comandos, cosméticos e prioridade na fila.</p>
+    <div class="preco">R$ 250<small>,00</small></div>
+    <button class="btn-comprar" onclick="addCarrinho('VIP Lendário', 250)">Comprar</button>
+  </div>
+
+  <div class="card">
+    <div class="icone">🌟</div>
+    <h3>VIP Eterno</h3>
+    <p>Permanente, todos os benefícios + item exclusivo.</p>
+    <div class="preco">R$ 500<small>,00</small></div>
+    <button class="btn-comprar" onclick="addCarrinho('VIP Eterno', 500)">Comprar</button>
+  </div>
+
+</div>
+
+<footer>© 2026 Atlas MC - Todos os direitos reservados</footer>
+<script src="js/carrinho.js"></script>
+</body>
+</html>
