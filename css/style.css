@@ -1,0 +1,235 @@
+* { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', sans-serif; }
+
+body {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+  color: #fff;
+  padding-bottom: 80px;
+}
+
+/* NAVBAR */
+nav {
+  background: rgba(0,0,0,0.7);
+  backdrop-filter: blur(10px);
+  padding: 15px 40px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 2px solid #00e5ff;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 0 20px rgba(0,229,255,0.4);
+}
+
+.logo {
+  font-size: 1.8rem;
+  font-weight: bold;
+  background: linear-gradient(90deg, #00e5ff, #a020f0);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  letter-spacing: 3px;
+}
+
+nav ul {
+  display: flex;
+  list-style: none;
+  gap: 30px;
+}
+
+nav a {
+  color: #ccc;
+  text-decoration: none;
+  font-weight: 500;
+  transition: 0.3s;
+  padding: 8px 15px;
+  border-radius: 8px;
+}
+
+nav a:hover, nav a.active {
+  color: #00e5ff;
+  background: rgba(0,229,255,0.1);
+  text-shadow: 0 0 10px #00e5ff;
+}
+
+.cart-btn {
+  background: linear-gradient(90deg, #00e5ff, #a020f0);
+  padding: 10px 20px;
+  border-radius: 50px;
+  color: #fff !important;
+  font-weight: bold;
+  cursor: pointer;
+  border: none;
+  transition: 0.3s;
+}
+
+.cart-btn:hover { transform: scale(1.05); box-shadow: 0 0 20px #00e5ff; }
+
+/* HEADER */
+header {
+  text-align: center;
+  padding: 60px 20px 40px;
+}
+
+header h1 {
+  font-size: 3rem;
+  background: linear-gradient(90deg, #00e5ff, #a020f0);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-bottom: 15px;
+  letter-spacing: 3px;
+}
+
+header p { color: #aaa; font-size: 1.1rem; }
+
+/* GRID DE PRODUTOS */
+.produtos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 25px;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px 40px;
+}
+
+.card {
+  background: rgba(0,0,0,0.55);
+  border: 2px solid rgba(0,229,255,0.3);
+  border-radius: 15px;
+  padding: 25px;
+  text-align: center;
+  transition: 0.3s;
+  position: relative;
+  overflow: hidden;
+}
+
+.card:hover {
+  transform: translateY(-8px);
+  border-color: #00e5ff;
+  box-shadow: 0 0 30px rgba(0,229,255,0.6);
+}
+
+.card .icone {
+  font-size: 3.5rem;
+  margin-bottom: 15px;
+  filter: drop-shadow(0 0 15px #00e5ff);
+}
+
+.card h3 {
+  font-size: 1.4rem;
+  margin-bottom: 10px;
+  color: #00e5ff;
+}
+
+.card p {
+  color: #bbb;
+  font-size: 0.95rem;
+  margin-bottom: 15px;
+  min-height: 40px;
+}
+
+.preco {
+  font-size: 1.8rem;
+  font-weight: bold;
+  color: #a020f0;
+  margin: 15px 0;
+  text-shadow: 0 0 15px rgba(160,32,240,0.6);
+}
+
+.preco small { font-size: 0.9rem; color: #888; }
+
+.btn-comprar {
+  width: 100%;
+  padding: 12px;
+  background: linear-gradient(90deg, #00e5ff, #a020f0);
+  border: none;
+  border-radius: 10px;
+  color: #fff;
+  font-weight: bold;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: 0.3s;
+}
+
+.btn-comprar:hover {
+  transform: scale(1.03);
+  box-shadow: 0 0 25px #a020f0;
+}
+
+/* BADGE PROMO */
+.badge {
+  position: absolute;
+  top: 15px;
+  right: -35px;
+  background: #ff0040;
+  color: #fff;
+  padding: 5px 40px;
+  transform: rotate(45deg);
+  font-size: 0.75rem;
+  font-weight: bold;
+  box-shadow: 0 0 15px #ff0040;
+}
+
+/* CARRINHO */
+.carrinho-container {
+  max-width: 900px;
+  margin: 40px auto;
+  padding: 30px;
+  background: rgba(0,0,0,0.55);
+  border-radius: 15px;
+  border: 2px solid #00e5ff;
+}
+
+.item-carrinho {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px;
+  background: rgba(255,255,255,0.05);
+  border-radius: 10px;
+  margin-bottom: 12px;
+}
+
+.item-carrinho button {
+  background: #ff0040;
+  border: none;
+  color: #fff;
+  padding: 8px 15px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.total {
+  text-align: right;
+  font-size: 1.6rem;
+  margin-top: 25px;
+  color: #00e5ff;
+  font-weight: bold;
+}
+
+.btn-finalizar {
+  width: 100%;
+  padding: 18px;
+  margin-top: 20px;
+  background: linear-gradient(90deg, #00e5ff, #a020f0);
+  border: none;
+  border-radius: 10px;
+  color: #fff;
+  font-size: 1.2rem;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.btn-finalizar:hover { box-shadow: 0 0 30px #a020f0; }
+
+.vazio { text-align: center; color: #888; padding: 40px; font-size: 1.2rem; }
+
+/* FOOTER */
+footer {
+  text-align: center;
+  padding: 30px;
+  color: #666;
+  font-size: 0.9rem;
+  margin-top: 60px;
+}
