@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Atlas MC - Kits</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<nav>
+  <div class="logo">⚔ ATLAS MC</div>
+  <ul>
+    <li><a href="index.html">GBzin</a></li>
+    <li><a href="kits.html" class="active">Kits</a></li>
+    <li><a href="ranks.html">Ranks</a></li>
+    <li><button class="cart-btn" onclick="location.href='carrinho.html'">🛒 (<span id="contador">0</span>)</button></li>
+  </ul>
+</nav>
+
+<header>
+  <h1>🎒 Loja de Kits</h1>
+  <p>Kits exclusivos para dominar o PvP e o Survival!</p>
+</header>
+
+<div class="produtos">
+
+  <div class="card">
+    <div class="icone">🗡️</div>
+    <h3>Kit PvP</h3>
+    <p>Espada, armadura e poções para dominar o combate.</p>
+    <div class="preco">R$ 10<small>,00</small></div>
+    <button class="btn-comprar" onclick="addCarrinho('Kit PvP', 10)">Comprar</button>
+  </div>
+
+  <div class="card">
+    <div class="badge">TOP</div>
+    <div class="icone">⚔️</div>
+    <h3>Kit Guerreiro</h3>
+    <p>Armadura de diamante + espada Sharpness V.</p>
+    <div class="preco">R$ 25<small>,00</small></div>
+    <button class="btn-comprar" onclick="addCarrinho('Kit Guerreiro', 25)">Comprar</button>
+  </div>
+
+  <div class="card">
+    <div class="icone">🏹</div>
+    <h3>Kit Arqueiro</h3>
+    <p>Arco Power V, flechas infinitas e armadura leve.</p>
+    <div class="preco">R$ 20<small>,00</small></div>
+    <button class="btn-comprar" onclick="addCarrinho('Kit Arqueiro', 20)">Comprar</button>
+  </div>
+
+  <div class="card">
+    <div class="icone">⛏️</div>
+    <h3>Kit Minerador</h3>
+    <p>Picaretas encantadas + tochas + blocos.</p>
+    <div class="preco">R$ 15<small>,00</small></div>
+    <button class="btn-comprar" onclick="addCarrinho('Kit Minerador', 15)">Comprar</button>
+  </div>
+
+  <div class="card">
+    <div class="icone">🔮</div>
+    <h3>Kit Mago</h3>
+    <p>Poções de força, velocidade e regeneração.</p>
+    <div class="preco">R$ 30<small>,00</small></div>
+    <button class="btn-comprar" onclick="addCarrinho('Kit Mago', 30)">Comprar</button>
+  </div>
+
+  <div class="card">
+    <div class="badge">LENDÁRIO</div>
+    <div class="icone">👑</div>
+    <h3>Kit Lendário</h3>
+    <p>Tudo o que precisas: PvP + recursos + encantamentos máximos.</p>
+    <div class="preco">R$ 75<small>,00</small></div>
+    <button class="btn-comprar" onclick="addCarrinho('Kit Lendário', 75)">Comprar</button>
+  </div>
+
+</div>
+
+<footer>© 2026 Atlas MC - Todos os direitos reservados</footer>
+<script src="js/carrinho.js"></script>
+</body>
+</html>
