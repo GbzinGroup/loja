@@ -2,82 +2,81 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<title>Atlas MC - Início</title>
-<style>
-  * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', sans-serif; }
-  body {
-    height: 100vh;
-    background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    color: #fff;
-    overflow: hidden;
-  }
-  .container {
-    text-align: center;
-    background: rgba(0,0,0,0.5);
-    padding: 60px 80px;
-    border-radius: 20px;
-    border: 2px solid #00e5ff;
-    box-shadow: 0 0 40px #00e5ff, inset 0 0 20px rgba(0,229,255,0.3);
-    animation: fadeIn 1.2s ease;
-  }
-  h1 {
-    font-size: 4rem;
-    letter-spacing: 4px;
-    background: linear-gradient(90deg, #00e5ff, #a020f0);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    text-shadow: 0 0 20px rgba(0,229,255,0.5);
-  }
-  p { margin: 20px 0 30px; font-size: 1.2rem; color: #ccc; }
-  .ip {
-    display: inline-block;
-    background: #111;
-    padding: 12px 25px;
-    border-radius: 10px;
-    font-family: monospace;
-    font-size: 1.3rem;
-    color: #00e5ff;
-    border: 1px solid #00e5ff;
-    cursor: pointer;
-    transition: 0.3s;
-  }
-  .ip:hover { background: #00e5ff; color: #111; }
-  .btn {
-    display: block;
-    margin: 25px auto 0;
-    padding: 15px 40px;
-    background: linear-gradient(90deg, #00e5ff, #a020f0);
-    border: none;
-    border-radius: 50px;
-    color: #fff;
-    font-size: 1.1rem;
-    font-weight: bold;
-    cursor: pointer;
-    transition: 0.3s;
-  }
-  .btn:hover { transform: scale(1.05); box-shadow: 0 0 25px #a020f0; }
-  @keyframes fadeIn { from { opacity: 0; transform: translateY(30px);} to { opacity: 1; transform: translateY(0);} }
-</style>
+<title>Atlas MC - GBzin</title>
+<link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <div class="container">
-    <h1>ATLAS MC</h1>
-    <p>A tua aventura épica começa aqui ⚔️</p>
-    <div class="ip" onclick="copiarIP()">play.atlasmc.com</div>
-    <button class="btn" onclick="entrar()">ENTRAR NO SERVIDOR</button>
+<nav>
+  <div class="logo">⚔ ATLAS MC</div>
+  <ul>
+    <li><a href="index.html" class="active">GBzin</a></li>
+    <li><a href="kits.html">Kits</a></li>
+    <li><a href="ranks.html">Ranks</a></li>
+    <li><button class="cart-btn" onclick="location.href='carrinho.html'">🛒 (<span id="contador">0</span>)</button></li>
+  </ul>
+</nav>
+
+<header>
+  <h1>💰 Loja de GBzin</h1>
+  <p>Compra GBzin e domina o Atlas MC!</p>
+</header>
+
+<div class="produtos" id="lista-produtos">
+
+  <div class="card">
+    <div class="icone">🪙</div>
+    <h3>1.000 GBzin</h3>
+    <p>Pacote inicial para começar a tua jornada.</p>
+    <div class="preco">R$ 5<small>,00</small></div>
+    <button class="btn-comprar" onclick="addCarrinho('1.000 GBzin', 5)">Comprar</button>
   </div>
 
-<script>
-  function copiarIP() {
-    navigator.clipboard.writeText("play.atlasmc.com");
-    alert("IP copiado: play.atlasmc.com");
-  }
-  function entrar() {
-    window.location.href = "https://discord.gg/atlasmc"; // muda para teu link
-  }
-</script>
+  <div class="card">
+    <div class="icone">💰</div>
+    <h3>5.000 GBzin</h3>
+    <p>Melhor custo-benefício para jogadores ativos.</p>
+    <div class="preco">R$ 20<small>,00</small></div>
+    <button class="btn-comprar" onclick="addCarrinho('5.000 GBzin', 20)">Comprar</button>
+  </div>
+
+  <div class="card">
+    <div class="badge">POPULAR</div>
+    <div class="icone">💎</div>
+    <h3>15.000 GBzin</h3>
+    <p>Pacote mais popular do servidor!</p>
+    <div class="preco">R$ 50<small>,00</small></div>
+    <button class="btn-comprar" onclick="addCarrinho('15.000 GBzin', 50)">Comprar</button>
+  </div>
+
+  <div class="card">
+    <div class="icone">👑</div>
+    <h3>50.000 GBzin</h3>
+    <p>Para os verdadeiros reis do Atlas.</p>
+    <div class="preco">R$ 130<small>,00</small></div>
+    <button class="btn-comprar" onclick="addCarrinho('50.000 GBzin', 130)">Comprar</button>
+  </div>
+
+  <div class="card">
+    <div class="badge">-20%</div>
+    <div class="icone">🏆</div>
+    <h3>100.000 GBzin</h3>
+    <p>Pacote lendário com desconto especial.</p>
+    <div class="preco">R$ 200<small>,00</small></div>
+    <button class="btn-comprar" onclick="addCarrinho('100.000 GBzin', 200)">Comprar</button>
+  </div>
+
+  <div class="card">
+    <div class="icone">🌟</div>
+    <h3>500.000 GBzin</h3>
+    <p>Pacote supremo para dominar tudo!</p>
+    <div class="preco">R$ 850<small>,00</small></div>
+    <button class="btn-comprar" onclick="addCarrinho('500.000 GBzin', 850)">Comprar</button>
+  </div>
+
+</div>
+
+<footer>© 2026 Atlas MC - Todos os direitos reservados</footer>
+
+<script src="js/carrinho.js"></script>
 </body>
 </html>
