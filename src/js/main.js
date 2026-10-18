@@ -2,15 +2,24 @@
    main.js — SPA Core Gbzin Shop
    ===================================================================== */
 import { auth } from './firebase-config.js';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import { 
+  createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword, 
+  signOut, 
+  onAuthStateChanged 
+} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import { store } from './store.js';
 import { $, appEl, headerEl, brl, escapeHtml, toast, icons, maskCPF, formatDate } from './utils.js';
 import { renderAdmin } from './admin.js';
 import { renderSupport } from './support.js';
 
+// LISTA DE ADMINS (Você e todos os e-mails enviados)
 const ADMINS = [
-  "gabrielcordeirosilva2010@gmail.com", "10pedrin0@gmail.com",
-  "lucaslyra875@gmail.com", "gbzinstudio@gmail.com", "Voabernas@gmail.com"
+  "gabrielcordeirosilva2010@gmail.com",
+  "10pedrin0@gmail.com",
+  "lucaslyra875@gmail.com",
+  "gbzinstudio@gmail.com",
+  "Voabernas@gmail.com"
 ];
 
 const state = {
@@ -53,6 +62,7 @@ function renderHeader() {
 function navigate(route, params = {}) {
   state.route = route; state.params = { ...state.params, ...params };
   
+  // Bloqueio de Manutenção
   if (state.maintenance && !state.isAdmin && route !== 'login' && route !== 'maintenance') {
      return renderMaintenance();
   }
@@ -70,6 +80,7 @@ function navigate(route, params = {}) {
     case 'cart': return renderCart();
     case 'checkout': return renderCheckout();
     case 'product-details': return renderProductDetails(params.id);
+    case 'maintenance': return renderMaintenance();
     default: return renderHome();
   }
 }
@@ -99,7 +110,7 @@ function renderHome() {
       </div>
       <button class="fav-btn" onclick="window.toggleFav('${p.id}', ${isFav})">${isFav ? '❤️' : '🤍'}</button>
       <div class="info">
-        <div class="category">${escapeHtml(p.category)} • ${escapeHtml(p.rarity)}</div>
+        <div class="category">${escapeHtml(p.category || 'Geral')} • ${escapeHtml(p.rarity || 'Comum')}</div>
         <div class="name">${escapeHtml(p.name)}</div>
         <div class="price">${p.promoPrice > 0 ? `<span style="text-decoration:line-through; font-size:0.8rem; color:#888;">${brl(p.price)}</span> ${brl(p.promoPrice)}` : brl(p.price)}</div>
       </div>
@@ -147,7 +158,7 @@ async function renderProductDetails(id) {
   `;
 }
 
-/* ------------------------------ CONTA E PERFIL ------------------------ */
+/* ------------------------------ CONTA E PERFIL (ABAS) ----------------- */
 async function renderAccount() {
   if (!state.user) return navigate('login'); 
   const p = await store.getCustomerProfile(state.user.uid); 
@@ -200,15 +211,33 @@ async function renderAccount() {
 window.setProfileTab = (t) => { state.profileTab = t; renderAccount(); };
 window.signOutUser = async () => { await signOut(auth); toast('Saiu.', 'success'); };
 
+/* ------------------------------ FAVORITOS (Atalho) -------------------- */
+function renderFavorites() {
+  if (!state.user) return navigate('login');
+  state.profileTab = 'favorites';
+  renderAccount();
+}
+
 /* ------------------------------ LOGIN / REGISTRO ---------------------- */
 function renderLogin() {
-  appEl().innerHTML = `<div class="card"><h2>Entrar</h2><form id="form"><div class="form-group"><label>E-mail</label><input type="email" id="email" required></div><div class="form-group"><label>Senha</label><input type="password" id="pass" required></div><button class="btn btn-primary" style="width:100%">Entrar</button></form></div>`;
-  $('#form').onsubmit = async (e) => { e.preventDefault(); try { await signInWithEmailAndPassword(auth, $('#email').value, $('#pass').value); } catch (err) { alert(err.message); } };
+  appEl().innerHTML = `<div class="card"><h2>Entrar</h2><form id="form"><div class="form-group"><label>E-mail</label><input type="email" id="email" required></div><div class="form-group"><label>Senha</label><input type="password" id="pass" required></div><button class="btn btn-primary" style="width:100%">Entrar</button></form><p class="muted mt-4" style="text-align:center"><a href="#" onclick="window.navigate('register')">Cadastre-se</a></p></div>`;
+  $('#form').onsubmit = async (e) => { 
+    e.preventDefault(); 
+    try { await signInWithEmailAndPassword(auth, $('#email').value, $('#pass').value); } 
+    catch (err) { toast(err.message, 'error'); } 
+  };
 }
 
 function renderRegister() {
   appEl().innerHTML = `<div class="card"><h2>Criar conta</h2><form id="form"><div class="form-group"><label>Nome</label><input type="text" id="name" required></div><div class="form-group"><label>E-mail</label><input type="email" id="email" required></div><div class="form-group"><label>Senha</label><input type="password" id="pass" required minlength="6"></div><button class="btn btn-primary" style="width:100%">Cadastrar</button></form></div>`;
-  $('#form').onsubmit = async (e) => { e.preventDefault(); try { const c = await createUserWithEmailAndPassword(auth, $('#email').value, $('#pass').value); await store.saveCustomerProfile(c.user, {name: $('#name').value}); toast('Conta criada!', 'success'); navigate('home'); } catch (err) { alert(err.message); } };
+  $('#form').onsubmit = async (e) => { 
+    e.preventDefault(); 
+    try { 
+      const c = await createUserWithEmailAndPassword(auth, $('#email').value, $('#pass').value); 
+      await store.saveCustomerProfile(c.user, {name: $('#name').value}); 
+      toast('Conta criada!', 'success'); navigate('home'); 
+    } catch (err) { toast(err.message, 'error'); } 
+  };
 }
 
 /* ------------------------------ CARRINHO E CHECKOUT ------------------- */
