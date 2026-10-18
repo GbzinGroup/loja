@@ -1,14 +1,33 @@
+/* =====================================================================
+   main.js — SPA Core Gbzin Shop
+   ===================================================================== */
 import { auth } from './firebase-config.js';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import { 
+  createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword, 
+  signOut, 
+  onAuthStateChanged 
+} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import { store } from './store.js';
-import { $, appEl, headerEl, brl, escapeHtml, toast } from './utils.js';
+import { $, appEl, headerEl, brl, escapeHtml, toast, formatDate } from './utils.js';
 
+// Importação dos módulos
 import { renderAdmin } from './admin.js';
 import { renderSupport } from './support.js';
 import { renderProductForm } from './productForm.js';
 import { renderAccount } from './account.js';
 
-const ADMINS = ["gabrielcordeirosilva2010@gmail.com", "10pedrin0@gmail.com", "lucaslyra875@gmail.com", "gbzinstudio@gmail.com", "Voabernas@gmail.com"];
+// Importação do gerador de QR Code (CDN)
+import { toDataURL } from 'https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js';
+
+// LISTA DE ADMINS
+const ADMINS = [
+  "gabrielcordeirosilva2010@gmail.com",
+  "10pedrin0@gmail.com",
+  "lucaslyra875@gmail.com",
+  "gbzinstudio@gmail.com",
+  "Voabernas@gmail.com"
+];
 
 const state = {
   route: 'home', params: {}, user: null, isAdmin: false, isOwner: false,
@@ -17,8 +36,10 @@ const state = {
   unsubCart: null, unsubProducts: null, unsubSettings: null, unsubFavs: null, unsubMaintenance: null
 };
 
+/* ------------------------------ HEADER -------------------------------- */
 function renderHeader() {
   if (state.maintenance && !state.isAdmin) return;
+
   let account = '';
   if (state.user) {
     if (state.isAdmin) account += `<button class="btn btn-outline" onclick="window.navigate('admin')">🛠️ <span class="label">Painel</span></button>`;
@@ -27,22 +48,29 @@ function renderHeader() {
   } else {
     account = `<button class="btn btn-outline" onclick="window.navigate('login')">👤 <span class="label">Entrar</span></button>`;
   }
+
   const count = Object.values(state.cart).reduce((s, i) => s + (i.qty || 0), 0);
+
   headerEl().innerHTML = `
     <div class="header-inner">
       <div class="logo" onclick="window.navigate('home')">${escapeHtml(state.settings.storeName)}</div>
       <div class="header-actions">
-        <button class="btn btn-outline btn-icon" onclick="window.navigate('support')" title="Suporte">🎧</button>
-        <button class="btn btn-outline btn-icon" onclick="window.navigate('favorites')" title="Favoritos">❤️</button>
-        <button class="btn btn-outline btn-icon" onclick="window.navigate('cart')" title="Carrinho">🛒${count > 0 ? `<span class="badge">${count}</span>` : ''}</button>
+        <button class="btn btn-icon btn-outline" onclick="window.navigate('support')" title="Suporte">🎧</button>
+        <button class="btn btn-icon btn-outline" onclick="window.navigate('favorites')" title="Favoritos">❤️</button>
+        <button class="btn btn-icon btn-outline" onclick="window.navigate('cart')" title="Carrinho">🛒${count > 0 ? `<span class="badge">${count}</span>` : ''}</button>
         ${account}
       </div>
     </div>`;
 }
 
+/* ------------------------------ NAVEGAÇÃO ----------------------------- */
 function navigate(route, params = {}) {
   state.route = route; state.params = { ...state.params, ...params };
-  if (state.maintenance && !state.isAdmin && route !== 'login' && route !== 'maintenance') return renderMaintenance();
+  
+  if (state.maintenance && !state.isAdmin && route !== 'login' && route !== 'maintenance') {
+     return renderMaintenance();
+  }
+
   renderHeader();
   switch (route) {
     case 'home': return renderHome();
@@ -62,12 +90,33 @@ function navigate(route, params = {}) {
 }
 window.navigate = navigate;
 
+/* ------------------------------ AÇÕES GLOBAIS ------------------------ */
 window.signOutUser = async () => { await signOut(auth); toast('Saiu.', 'success'); };
-document.addEventListener('setProfileTab', (e) => { state.profileTab = e.detail; renderAccount(state); });
-window.toggleFav = async (pid, isFav) => { if (!state.user) return toast('Faça login.', 'error'); await store.toggleFavorite(state.user.uid, pid, isFav); };
-window.addCart = async (pid) => { if (!state.user) return navigate('login'); const i = state.cart[pid]; await store.updateCart(state.user.uid, { ...state.cart, [pid]: { qty: (i?.qty || 0) + 1 } }); toast('Adicionado!', 'success'); };
-window.updateCartQty = async (pid, qty) => { const c = { ...state.cart }; if (qty <= 0) delete c[pid]; else c[pid] = { qty }; await store.updateCart(state.user.uid, c); };
 
+document.addEventListener('setProfileTab', (e) => {
+  state.profileTab = e.detail;
+  renderAccount(state);
+});
+
+window.toggleFav = async (pid, isFav) => {
+  if (!state.user) return toast('Faça login.', 'error');
+  await store.toggleFavorite(state.user.uid, pid, isFav);
+};
+
+window.addCart = async (pid) => {
+  if (!state.user) return navigate('login');
+  const itemRef = state.cart[pid];
+  await store.updateCart(state.user.uid, { ...state.cart, [pid]: { qty: (itemRef?.qty || 0) + 1 } });
+  toast('Adicionado!', 'success');
+};
+
+window.updateCartQty = async (pid, qty) => {
+  const newCart = { ...state.cart };
+  if (qty <= 0) delete newCart[pid]; else newCart[pid] = { qty };
+  await store.updateCart(state.user.uid, newCart);
+};
+
+/* ------------------------------ TELAS BÁSICAS ------------------------- */
 function renderMaintenance() {
   headerEl().innerHTML = '';
   appEl().innerHTML = `<div class="empty-state" style="height: 70vh;"><h1 style="font-size: 3rem; margin-bottom: 16px;">🚧</h1><h2>Estamos em Manutenção</h2><p>Voltamos em breve.</p><button class="btn btn-primary mt-6" onclick="window.navigate('login')">Fazer Login</button></div>`;
@@ -75,7 +124,7 @@ function renderMaintenance() {
 
 function renderHome() {
   const list = state.products.filter(p => p.active !== false);
-  const card = (p, isFav) => `
+  const renderCard = (p, isFav) => `
     <div class="product-card">
       <div class="thumb" onclick="window.navigate('product-details', {id: '${p.id}'})">
         ${p.image ? `<img src="${p.image}" />` : `<div class="placeholder">🛍️</div>`}
@@ -91,7 +140,13 @@ function renderHome() {
 
   const best = [...list].sort((a, b) => (b.salesCount || 0) - (a.salesCount || 0)).slice(0, 4);
   const news = list.slice(0, 4);
-  appEl().innerHTML = `<h2 class="section-title">🔥 Mais Vendidas</h2><div class="product-grid">${best.map(p => card(p, state.favorites[p.id])).join('')}</div><h2 class="section-title mt-8">✨ Novidades</h2><div class="product-grid">${news.map(p => card(p, state.favorites[p.id])).join('')}</div>`;
+  
+  appEl().innerHTML = `
+    <h2 class="section-title">🔥 Mais Vendidas</h2>
+    <div class="product-grid">${best.map(p => renderCard(p, state.favorites[p.id])).join('')}</div>
+    <h2 class="section-title mt-8">✨ Novidades</h2>
+    <div class="product-grid">${news.map(p => renderCard(p, state.favorites[p.id])).join('')}</div>
+  `;
 }
 
 function renderProductDetails(id) {
@@ -119,9 +174,9 @@ function renderCart() {
   appEl().innerHTML = `<h2 class="section-title">Carrinho</h2>${html}<div class="cart-summary mt-6 flex-between items-center"><h3 style="margin: 0;">Total: ${brl(total)}</h3><button class="btn btn-primary" onclick="window.navigate('checkout')">Continuar</button></div>`;
 }
 
-// =====================================================================
-// CHECKOUT COM SISTEMA DE CUPOM
-// =====================================================================
+/* =====================================================================
+   CHECKOUT COM CUPOM E QR CODE PIX
+   ===================================================================== */
 async function renderCheckout() {
   if (!state.user) return navigate('login');
   
@@ -131,8 +186,8 @@ async function renderCheckout() {
   });
   
   const totalOriginal = items.reduce((acc, curr) => acc + (curr.price * curr.qty), 0);
+  const pixKey = state.settings.pixKey || 'a7a8c1e6-5a54-45a1-a186-784fb6aced6c';
   
-  // Variável local no escopo da renderização para guardar o desconto atual
   window.checkoutDiscount = 0;
   window.appliedCoupon = null;
 
@@ -154,19 +209,44 @@ async function renderCheckout() {
       <div class="flex-between mb-2"><span class="muted">Subtotal:</span> <span>${brl(totalOriginal)}</span></div>
       <div class="flex-between mb-2" id="discountRow" style="display: none; color: var(--success);"><span>Desconto:</span> <span id="discountValue">-R$ 0,00</span></div>
       
-      <div class="form-group mt-4 pt-4" style="border-top: 1px solid var(--border);">
-        <label>Chave PIX</label>
-        <input type="text" value="${state.settings.pixKey}" disabled style="font-family: monospace; color: var(--primary);">
+      <!-- Pagamento PIX com QR Code -->
+      <div style="background: var(--bg-elev-2); padding: 24px; border-radius: 12px; margin-top: 24px; display: flex; flex-direction: column; align-items: center; gap: 16px;">
+        <h3 style="margin: 0; color: var(--primary);">Pagamento via PIX</h3>
+        
+        <div id="qrcodeContainer" style="background: #fff; padding: 12px; border-radius: 8px;">
+          <div id="loadingQR" class="muted">Gerando QR Code...</div>
+        </div>
+        
+        <div class="form-group" style="width: 100%; text-align: center;">
+          <label>Ou copie a chave abaixo:</label>
+          <div class="flex gap-2 justify-center mt-2">
+            <input type="text" value="${pixKey}" readonly style="flex: 1; padding: 10px; border-radius: 8px; border: 1px dashed var(--border-strong); background: var(--bg); color: var(--text); font-family: monospace; text-align: center;">
+            <button class="btn btn-outline" onclick="navigator.clipboard.writeText('${pixKey}'); alert('Chave PIX copiada!')">Copiar</button>
+          </div>
+        </div>
       </div>
 
-      <div class="flex-between items-center mt-6">
+      <div class="flex-between items-center mt-8">
         <div>
           <div class="muted" style="font-size: 0.85rem;">Total a Pagar</div>
           <h3 style="font-size: 1.8rem; color: var(--primary);" id="finalTotal">${brl(totalOriginal)}</h3>
         </div>
-        <button class="btn btn-primary" id="btnFinish" style="padding: 14px 32px;">Confirmar Pedido</button>
+        <button class="btn btn-primary" id="btnFinish" style="padding: 14px 32px;">Já realizei o Pagamento</button>
       </div>
     </div>`;
+
+  // GERA O QR CODE
+  try {
+    const qrDataUrl = await toDataURL(pixKey, { width: 200, margin: 1 });
+    const qrContainer = document.getElementById('qrcodeContainer');
+    if (qrContainer) {
+      qrContainer.innerHTML = `<img src="${qrDataUrl}" alt="QR Code PIX" />`;
+    }
+  } catch (err) {
+    console.error("Erro ao gerar QR Code", err);
+    const qrContainer = document.getElementById('qrcodeContainer');
+    if (qrContainer) qrContainer.innerHTML = `<span class="muted" style="color:var(--danger);">Erro ao gerar QR Code. Use a chave abaixo.</span>`;
+  }
 
   // Ação de Aplicar Cupom
   $('#btnApplyCoupon').onclick = async () => {
@@ -177,11 +257,10 @@ async function renderCheckout() {
     const msgEl = $('#couponMsg');
     
     if (coupon && coupon.active) {
-      // Calcula o desconto
       if (coupon.type === 'percent') {
         window.checkoutDiscount = totalOriginal * (coupon.discount / 100);
       } else {
-        window.checkoutDiscount = Math.min(coupon.discount, totalOriginal); // Desconto fixo não pode passar do total
+        window.checkoutDiscount = Math.min(coupon.discount, totalOriginal);
       }
       window.appliedCoupon = coupon.code;
 
@@ -223,11 +302,14 @@ async function renderCheckout() {
   };
 }
 
-// =====================================================================
-// BOOTSTRAP
-// =====================================================================
+/* ------------------------------ BOOTSTRAP ----------------------------- */
 state.unsubSettings = store.listenSettings((s) => { if (s.storeName) state.settings = s; renderHeader(); });
-state.unsubMaintenance = store.listenMaintenance((m) => { state.maintenance = m; if (m && !state.isAdmin) renderMaintenance(); else if (!m && state.route === 'maintenance') navigate('home'); });
+state.unsubMaintenance = store.listenMaintenance((m) => {
+  state.maintenance = m;
+  if (m && !state.isAdmin) renderMaintenance();
+  else if (!m && state.route === 'maintenance') navigate('home');
+});
+
 store.listenCoupons((c) => { state.coupons = c; });
 
 onAuthStateChanged(auth, async (user) => {
@@ -236,10 +318,13 @@ onAuthStateChanged(auth, async (user) => {
     window.currentUserUid = user.uid;
     state.isOwner = ADMINS.includes(user.email);
     state.isAdmin = ADMINS.includes(user.email);
+    
     if (state.unsubCart) state.unsubCart();
     state.unsubCart = store.listenCart(user.uid, (c) => { state.cart = c; renderHeader(); });
+
     if (state.unsubFavs) state.unsubFavs();
     state.unsubFavs = store.listenFavorites(user.uid, (f) => { state.favorites = f; if (state.route === 'home') renderHome(); });
+    
     await store.saveCustomerProfile(user);
   } else {
     window.currentUserUid = null;
@@ -248,12 +333,16 @@ onAuthStateChanged(auth, async (user) => {
     if (state.unsubFavs) state.unsubFavs();
     renderHeader();
   }
+
   if (state.maintenance && !state.isAdmin && state.route !== 'login') renderMaintenance();
   else if (state.route === 'home') renderHome(); else navigate(state.route, state.params);
 });
 
 if (state.unsubProducts) state.unsubProducts();
-state.unsubProducts = store.listenProducts((list) => { state.products = list; if (state.route === 'home') renderHome(); });
+state.unsubProducts = store.listenProducts((list) => {
+  state.products = list;
+  if (state.route === 'home') renderHome();
+});
 
 document.getElementById('year').textContent = new Date().getFullYear();
 navigate('home');
