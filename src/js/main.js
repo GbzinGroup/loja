@@ -220,7 +220,6 @@ async function renderProductDetails(id) {
 
   $('#reviewForm')?.addEventListener('submit', async (e) => {
     e.preventDefault();
-    // Pega o nome direto do Auth, para não depender do Firestore (evita erro de permissão)
     const userName = state.user.displayName || state.user.email.split('@')[0] || 'Cliente';
     await store.addReview(id, state.user.uid, userName, Number($('#revRating').value), $('#revComment').value);
     toast('Avaliação enviada!', 'success');
@@ -349,7 +348,6 @@ async function renderCheckout() {
     const finalTotal = totalProducts + totalExtras - (window.currentDiscount || 0);
     
     try {
-      // Pega o nome direto do Auth para evitar erro de permissão no Firestore
       const customerName = state.user.displayName || state.user.email.split('@')[0] || 'Cliente';
       
       await store.createOrder(state.user.uid, customerName, items, finalTotal, 'PIX', '', extrasSelected, null, false, null);
@@ -446,7 +444,6 @@ function renderRegister() {
     e.preventDefault(); 
     try { 
       const c = await createUserWithEmailAndPassword(auth, $('#email').value, $('#pass').value); 
-      // Salva o perfil. Se o Firestore bloquear, não irá travar o cadastro.
       await store.saveCustomerProfile(c.user, {name: $('#name').value}); 
       toast('Conta criada!', 'success'); navigate('home'); 
     } catch (err) { $('#msg').innerHTML = `<div class="alert alert-error">${err.message}</div>`; } 
@@ -566,23 +563,24 @@ async function renderAdmin(tab = 'dashboard') {
     `;
   }
   else if (tab === 'team' && state.isOwner) {
-    const vendedoresList = Object.values(state.vendedores).map(v => `
+    const vendedoresList = Object.entries(state.vendedores).map(([key, v]) => `
       <div class="flex-between" style="background:var(--bg-elev); padding:16px; border-radius:8px; margin-bottom:12px; border:1px solid var(--border);">
         <div style="display:flex; gap:12px; align-items:center;">
           <div style="width:40px; height:40px; background:var(--primary-soft); border-radius:50%; display:grid; place-items:center; color:var(--primary); font-weight:bold;">${v.nome.charAt(0)}</div>
           <div><strong>${escapeHtml(v.nome)}</strong> <br><span class="muted">${escapeHtml(v.email)}</span></div>
         </div>
-        <button class="btn btn-danger" style="padding:6px 12px; font-size:.8rem;" data-del-vend="${v.email}">Remover</button>
+        <button class="btn btn-danger" style="padding:6px 12px; font-size:.8rem;" data-del-vend="${key}">Remover</button>
       </div>
     `).join('');
 
     content = `
       <div class="card" style="max-width:600px; margin-bottom:24px; border-color:var(--primary);">
         <h3>Adicionar Vendedor</h3>
-        <p class="muted mb-4">O e-mail inserido terá acesso ao painel.</p>
+        <p class="muted mb-4">O e-mail inserido terá acesso ao painel. Certifique-se de que ele já criou uma conta no site.</p>
         <form id="addVendForm" style="display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap;">
           <div class="form-group" style="flex:1; margin:0;"><label>Nome</label><input type="text" id="vNome" required /></div>
-          <div class="form-group" style="flex:2; margin:0;"><label>E-mail</label><input type="email" id="vEmail" required /></div>
+          <div class="form-group" style="flex:1; margin:0;"><label>E-mail</label><input type="email" id="vEmail" required /></div>
+          <div class="form-group" style="flex:1; margin:0;"><label>UID (Opcional)</label><input type="text" id="vUid" placeholder="Deixe vazio se não souber" /></div>
           <button type="submit" class="btn btn-primary">Adicionar</button>
         </form>
       </div>
@@ -591,7 +589,6 @@ async function renderAdmin(tab = 'dashboard') {
     `;
   }
 
-  // Renderiza a estrutura de abas
   const tabsHtml = `
     <div style="margin-bottom:24px; border-bottom:1px solid var(--border); display:flex; gap:24px; overflow-x:auto;">
       <button class="tab-btn ${tab === 'dashboard' ? 'active' : ''}" onclick="window.navigate('admin', {tab: 'dashboard'})">Visão Geral</button>
@@ -605,7 +602,6 @@ async function renderAdmin(tab = 'dashboard') {
 
   appEl().innerHTML = `<div style="max-width:1200px; margin:0 auto; width:100%;">${tabsHtml}${content}</div>`;
 
-  // Event Listeners
   appEl().querySelectorAll('[data-nav]').forEach((el) => el.addEventListener('click', () => navigate(el.getAttribute('data-nav'))));
   appEl().querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => navigate('product-form', { id: b.getAttribute('data-edit') })));
   appEl().querySelectorAll('[data-toggle]').forEach((b) => b.addEventListener('click', async () => {
@@ -637,8 +633,10 @@ async function renderAdmin(tab = 'dashboard') {
     $('#addVendForm')?.addEventListener('submit', async (e) => {
       e.preventDefault();
       const email = $('#vEmail').value.trim();
+      const uid = $('#vUid').value.trim();
       if (email === ADMIN_EMAIL) return toast('Você já é o dono.', 'error');
-      await store.addVendedor(email, $('#vNome').value.trim());
+      
+      await store.addVendedor(email, $('#vNome').value.trim(), uid);
       toast('Adicionado!', 'success'); e.target.reset();
     });
     appEl().querySelectorAll('[data-del-vend]').forEach((b) => b.addEventListener('click', async () => {
@@ -649,7 +647,8 @@ async function renderAdmin(tab = 'dashboard') {
 
 /* -------------------------- FORM PRODUTO ------------------------------ */
 function renderProductForm(id) {
-  if (!state.isAdmin) return navigate('login');
+  if (!state.isAdmin) { toast('Acesso restrito.', 'error'); return navigate('login'); }
+  
   const ed = id ? state.products.find((p) => p.id === id) : null;
   const previewHtml = ed?.image ? `<img id="imgPreview" src="${ed.image}" style="display:block; width:100%; height:200px; object-fit:cover; border-radius:8px; margin-top:12px;" />` : `<img id="imgPreview" style="display:none; width:100%; height:200px; object-fit:cover; border-radius:8px; margin-top:12px;" />`;
 
@@ -661,13 +660,21 @@ function renderProductForm(id) {
         
         <div style="display:flex; gap:16px;">
           <div class="form-group" style="flex:1;"><label>Preço Original (R$)</label><input type="number" id="pPrice" step="0.01" min="0" required value="${ed ? ed.price : ''}" /></div>
-          <div class="form-group" style="flex:1;"><label>Preço Promocional (Opcional)</label><input type="number" id="pPromo" step="0.01" min="0" value="${ed ? ed.promoPrice : ''}" /></div>
+          <div class="form-group" style="flex:1;"><label>Preço Promocional</label><input type="number" id="pPromo" step="0.01" min="0" value="${ed ? ed.promoPrice : ''}" /></div>
         </div>
 
         <div style="display:flex; gap:16px;">
-          <div class="form-group" style="flex:1;"><label>Estoque (Qtd)</label><input type="number" id="pStock" min="0" required value="${ed ? ed.stock : '10'}" /></div>
-          <div class="form-group" style="flex:1;"><label>Estilo / Categoria</label><input type="text" id="pCategory" required value="${ed ? escapeHtml(ed.category) : ''}" /></div>
-          <div class="form-group" style="flex:1;"><label>Raridade</label><select id="pRarity" class="filter-select" style="width:100%; height:42px;"><option value="Comum" ${ed?.rarity === 'Comum' ? 'selected' : ''}>Comum</option><option value="Rara" ${ed?.rarity === 'Rara' ? 'selected' : ''}>Rara</option><option value="Épica" ${ed?.rarity === 'Épica' ? 'selected' : ''}>Épica</option><option value="Lendária" ${ed?.rarity === 'Lendária' ? 'selected' : ''}>Lendária</option></select></div>
+          <div class="form-group" style="flex:1;"><label>Estoque</label><input type="number" id="pStock" min="0" required value="${ed ? ed.stock : '10'}" /></div>
+          <div class="form-group" style="flex:1;"><label>Categoria / Estilo</label><input type="text" id="pCategory" required value="${ed ? escapeHtml(ed.category) : ''}" /></div>
+          <div class="form-group" style="flex:1;">
+            <label>Raridade</label>
+            <select id="pRarity" class="filter-select" style="width:100%; height:42px;">
+              <option value="Comum" ${ed?.rarity === 'Comum' ? 'selected' : ''}>Comum</option>
+              <option value="Rara" ${ed?.rarity === 'Rara' ? 'selected' : ''}>Rara</option>
+              <option value="Épica" ${ed?.rarity === 'Épica' ? 'selected' : ''}>Épica</option>
+              <option value="Lendária" ${ed?.rarity === 'Lendária' ? 'selected' : ''}>Lendária</option>
+            </select>
+          </div>
         </div>
 
         <div class="form-group"><label>Descrição</label><textarea id="pDesc" rows="2">${ed ? escapeHtml(ed.description) : ''}</textarea></div>
@@ -705,14 +712,10 @@ function renderProductForm(id) {
 
   $('#productForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const btn = $('#btnSubmit'); 
-    btn.textContent = 'Salvando...'; 
-    btn.disabled = true;
+    const btn = $('#btnSubmit'); btn.textContent = 'Salvando...'; btn.disabled = true;
     
     let expiresVal = 0;
-    if ($('#pExpires').value) {
-      expiresVal = new Date($('#pExpires').value).getTime();
-    }
+    if ($('#pExpires').value) expiresVal = new Date($('#pExpires').value).getTime();
     
     const data = { 
       name: $('#pName').value.trim(), 
@@ -728,16 +731,13 @@ function renderProductForm(id) {
     };
     
     try {
-      if (ed) {
-        await store.updateProduct(ed.id, data); 
-      } else {
-        await store.addProduct(data);
-      }
+      if (ed) await store.updateProduct(ed.id, data); 
+      else await store.addProduct(data);
       toast('Produto salvo com sucesso!', 'success'); 
       navigate('admin', {tab:'products'});
     } catch (err) { 
-      toast('Erro ao salvar. Verifique sua conexão.', 'error'); 
-      console.error(err); 
+      toast('Erro ao salvar. Verifique o console (F12).', 'error'); 
+      console.error("Erro no Firebase:", err); 
       btn.disabled = false; 
       btn.textContent = 'Salvar Produto'; 
     }
@@ -762,7 +762,11 @@ onAuthStateChanged(auth, async (user) => {
     if (state.unsubVendedores) state.unsubVendedores();
     state.unsubVendedores = store.listenVendedores((v) => {
       state.vendedores = v;
-      state.isAdmin = state.isOwner || (v[user.email.replace(/\./g, ',')] !== undefined);
+      // Verifica se o usuário logado é Admin (Dono ou está na lista de vendedores via UID ou Email)
+      const safeEmail = user.email.replace(/\./g, ',');
+      const isVendedor = v[user.uid] !== undefined || v[safeEmail] !== undefined;
+      state.isAdmin = state.isOwner || isVendedor;
+      
       if (state.route === 'admin') renderAdmin(state.params.tab || 'dashboard');
       renderHeader();
     });
