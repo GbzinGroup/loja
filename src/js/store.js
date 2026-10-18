@@ -85,13 +85,21 @@ export const store = {
     else await set(refFav, true);
   },
 
-  /* ================= CUPONS E CONFIGURAÇÕES ================= */
+  /* ================= CUPONS, CONFIGURAÇÕES E MANUTENÇÃO ================= */
   listenSettings(callback) {
     return onValue(ref(db, 'settings'), (snapshot) => callback(snapshot.val() || {}));
   },
   
   async saveSettings(data) {
     await update(ref(db, 'settings'), data);
+  },
+
+  listenMaintenance(callback) {
+    return onValue(ref(db, 'maintenance'), (snapshot) => callback(snapshot.val() === true));
+  },
+
+  async saveMaintenance(status) {
+    await set(ref(db, 'maintenance'), status);
   },
 
   listenCoupons(callback) {
@@ -216,18 +224,17 @@ export const store = {
     return onValue(ref(db, 'vendedores'), (snapshot) => callback(snapshot.val() || {}));
   },
 
-  // IMPORTANTE: Agora salvamos o UID do vendedor para a Regra do Firebase validar
-  async addVendedor(email, nome, uid) {
-    const safeKey = uid || email.replace(/\./g, ','); // Usa UID se tiver, senão e-mail
-    await set(ref(db, `vendedores/${safeKey}`), { 
+  async addVendedor(email, nome) {
+    const safeEmail = email.replace(/\./g, ',');
+    await set(ref(db, `vendedores/${safeEmail}`), { 
       email, 
       nome, 
-      uid: uid || '', 
       addedAt: Date.now() 
     });
   },
 
-  async removeVendedor(key) {
-    await remove(ref(db, `vendedores/${key}`));
+  async removeVendedor(email) {
+    const safeEmail = email.replace(/\./g, ',');
+    await remove(ref(db, `vendedores/${safeEmail}`));
   }
 };
