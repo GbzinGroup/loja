@@ -1,27 +1,11 @@
-import { firestore } from './firebase-config.js';
-import { doc, getDoc, setDoc } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
-import { getAuth } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import { store } from './store.js';
+import { escapeHtml } from './utils.js';
 
-export async function getMyProfile() {
-  const user = getAuth().currentUser;
-  if (!user) return null;
-  const snap = await getDoc(doc(firestore, 'customers', user.uid));
-  return snap.exists() ? snap.data() : null;
-}
+export async function renderCustomers(state) {
+  const customers = await store.getAllCustomers();
+  if (!customers.length) return `<p class="muted">Nenhum cliente.</p>`;
 
-export async function saveMyProfile(data) {
-  const user = getAuth().currentUser;
-  if (!user) return;
-  const userRef = doc(firestore, 'customers', user.uid);
-  const snap = await getDoc(userRef);
-  
-  if (!snap.exists()) {
-    await setDoc(userRef, { 
-      email: user.email || '', 
-      name: data.name || user.displayName || 'Cliente', 
-      createdAt: new Date().getTime() 
-    });
-  } else if (data.name) {
-    await setDoc(userRef, { name: data.name }, { merge: true });
-  }
+  return `<div class="table-wrap"><table class="data-table"><thead><tr><th>Nome</th><th>E-mail</th></tr></thead><tbody>
+    ${customers.map(c => `<tr><td>${escapeHtml(c.name)}</td><td>${escapeHtml(c.email)}</td></tr>`).join('')}
+  </tbody></table></div>`;
 }
