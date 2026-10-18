@@ -1,332 +1,144 @@
-/* =====================================================================
-   main.js — SPA Core Gbzin Shop (Integrado com a estrutura de arquivos)
-   ===================================================================== */
 import { auth } from './firebase-config.js';
-import { 
-  createUserWithEmailAndPassword, 
-  signInWithEmailAndPassword, 
-  signOut, 
-  onAuthStateChanged 
-} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import { store } from './store.js';
 import { $, appEl, headerEl, brl, escapeHtml, toast, formatDate } from './utils.js';
 
-// Importação dos módulos existentes
 import { renderAdmin } from './admin.js';
 import { renderSupport } from './support.js';
 import { renderProductForm } from './productForm.js';
-
-// NOVOS MÓDULOS (Agora batendo com os arquivos que você criou)
 import { getProductReviews, addReview } from './reviews.js';
 import { getMyOrders, createOrder } from './orders.js';
 import { getMyProfile, saveMyProfile } from './customers.js';
 
-const ADMINS = [
-  "gabrielcordeirosilva2010@gmail.com",
-  "10pedrin0@gmail.com",
-  "lucaslyra875@gmail.com",
-  "gbzinstudio@gmail.com",
-  "Voabernas@gmail.com"
-];
+const ADMINS = ["gabrielcordeirosilva2010@gmail.com", "10pedrin0@gmail.com", "lucaslyra875@gmail.com", "gbzinstudio@gmail.com", "Voabernas@gmail.com"];
 
 const state = {
-  route: 'home', params: {}, user: null, isAdmin: false, isOwner: false,
+  route: 'home', params: {}, user: null, isAdmin: false,
   products: [], cart: {}, favorites: {}, settings: { storeName: 'Gbzin Shop' },
-  maintenance: false, profileTab: 'data',
-  unsubCart: null, unsubProducts: null, unsubSettings: null, unsubFavs: null, unsubMaintenance: null
+  maintenance: false, profileTab: 'data'
 };
 
-/* ------------------------------ HEADER -------------------------------- */
+/* ---------------- HEADER ---------------- */
 function renderHeader() {
   if (state.maintenance && !state.isAdmin) return;
-
-  let account = '';
-  if (state.user) {
-    if (state.isAdmin) account += `<button class="btn btn-outline" onclick="window.navigate('admin')">🛠️ <span class="label">Painel</span></button>`;
-    account += `<button class="btn btn-outline" onclick="window.navigate('account')">👤 <span class="label">Conta</span></button>`;
-    account += `<button class="btn btn-outline" id="logoutBtn">🚪 <span class="label">Sair</span></button>`;
-  } else {
-    account = `<button class="btn btn-outline" onclick="window.navigate('login')">👤 <span class="label">Entrar</span></button>`;
-  }
-
+  let account = state.user 
+    ? `${state.isAdmin ? `<button class="btn btn-outline" onclick="window.navigate('admin')">🛠️ Painel</button>` : ''}
+       <button class="btn btn-outline" onclick="window.navigate('account')">👤 Conta</button>
+       <button class="btn btn-outline" id="logoutBtn">🚪 Sair</button>`
+    : `<button class="btn btn-outline" onclick="window.navigate('login')">👤 Entrar</button>`;
+  
   const count = Object.values(state.cart).reduce((s, i) => s + (i.qty || 0), 0);
-
   headerEl().innerHTML = `
     <div class="header-inner">
       <div class="logo" onclick="window.navigate('home')">${escapeHtml(state.settings.storeName)}</div>
       <div class="header-actions">
-        <button class="btn btn-icon btn-outline" onclick="window.navigate('support')" title="Suporte">🎧</button>
-        <button class="btn btn-icon btn-outline" onclick="window.navigate('favorites')" title="Favoritos">❤️</button>
         <button class="btn btn-icon btn-outline" onclick="window.navigate('cart')" title="Carrinho">🛒${count > 0 ? `<span class="badge">${count}</span>` : ''}</button>
         ${account}
       </div>
     </div>`;
-  
   $('#logoutBtn')?.addEventListener('click', async () => { await signOut(auth); toast('Sessão encerrada.', 'success'); });
 }
 
-/* ------------------------------ NAVEGAÇÃO ----------------------------- */
+/* ---------------- NAVEGAÇÃO ---------------- */
 function navigate(route, params = {}) {
   state.route = route; state.params = { ...state.params, ...params };
-  
-  if (state.maintenance && !state.isAdmin && route !== 'login' && route !== 'maintenance') {
-     return renderMaintenance();
-  }
-
+  if (state.maintenance && !state.isAdmin && route !== 'login' && route !== 'maintenance') return renderMaintenance();
   renderHeader();
   switch (route) {
     case 'home': return renderHome();
     case 'login': return renderLogin();
     case 'register': return renderRegister();
     case 'account': return renderAccount();
-    case 'favorites': return renderFavorites();
-    case 'support': return renderSupport();
     case 'admin': return renderAdmin(state, params.tab || 'dashboard');
     case 'product-form': return renderProductForm(state, params.id);
     case 'cart': return renderCart();
     case 'checkout': return renderCheckout();
     case 'product-details': return renderProductDetails(params.id);
     case 'maintenance': return renderMaintenance();
+    case 'support': return renderSupport();
     default: return renderHome();
   }
 }
 window.navigate = navigate;
 
-/* ------------------------------ MANUTENÇÃO --------------------------- */
+/* ---------------- TELAS ---------------- */
 function renderMaintenance() {
   headerEl().innerHTML = '';
-  appEl().innerHTML = `
-    <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:70vh; text-align:center;">
-      <div style="font-size:4rem; margin-bottom:20px;">🚧</div>
-      <h1 style="font-size:2rem; margin-bottom:12px;">Estamos em Manutenção</h1>
-      <p class="muted" style="max-width:400px; margin-bottom:24px;">Estamos melhorando a loja para você. Voltamos em breve! Se você é administrador, faça login abaixo.</p>
-      <button class="btn btn-primary" onclick="window.navigate('login')">Fazer Login</button>
-    </div>
-  `;
+  appEl().innerHTML = `<div style="text-align:center; padding:100px 20px;"><h1>🚧 Manutenção</h1><p>Voltamos em breve.</p><button class="btn btn-primary" onclick="window.navigate('login')">Login Admin</button></div>`;
 }
 
-/* ------------------------------ HOME ---------------------------------- */
 function renderHome() {
-  const renderCard = (p, isFav) => `
+  const card = (p, isFav) => `
     <div class="product-card">
       <div class="thumb" onclick="window.navigate('product-details', {id: '${p.id}'})" style="cursor:pointer">
         ${p.image ? `<img src="${p.image}" />` : `<div class="placeholder">🛍️</div>`}
       </div>
       <button class="fav-btn" onclick="window.toggleFav('${p.id}', ${isFav})">${isFav ? '❤️' : '🤍'}</button>
       <div class="info">
-        <div class="category">${escapeHtml(p.category || 'Geral')} • ${escapeHtml(p.rarity || 'Comum')}</div>
+        <div class="category">${escapeHtml(p.category || 'Geral')}</div>
         <div class="name">${escapeHtml(p.name)}</div>
-        <div class="price">${p.promoPrice > 0 ? `<span style="text-decoration:line-through; font-size:0.8rem; color:#888;">${brl(p.price)}</span> ${brl(p.promoPrice)}` : brl(p.price)}</div>
+        <div class="price">${p.promoPrice > 0 ? `<span style="text-decoration:line-through; font-size:0.8rem;">${brl(p.price)}</span> ${brl(p.promoPrice)}` : brl(p.price)}</div>
       </div>
-      <div class="actions"><button class="btn btn-primary" onclick="window.addCart('${p.id}')" ${p.stock <= 0 ? 'disabled' : ''}>${p.stock <= 0 ? 'Esgotado' : 'Comprar'}</button></div>
+      <div class="actions"><button class="btn btn-primary" onclick="window.addCart('${p.id}')" ${p.stock <= 0 ? 'disabled' : ''}>Comprar</button></div>
     </div>`;
-
-  const bestSellers = [...state.products].sort((a, b) => (b.salesCount || 0) - (a.salesCount || 0)).slice(0, 4);
-  const news = state.products.slice(0, 4);
-
-  appEl().innerHTML = `
-    <h2 class="section-title">🔥 Mais Vendidas</h2>
-    <div class="product-grid">${bestSellers.map(p => renderCard(p, state.favorites[p.id])).join('')}</div>
-    <h2 class="section-title" style="margin-top:40px">✨ Novidades</h2>
-    <div class="product-grid">${news.map(p => renderCard(p, state.favorites[p.id])).join('')}</div>
-  `;
+  
+  const list = state.products.filter(p => p.active !== false);
+  appEl().innerHTML = `<h2 class="section-title">✨ Novidades</h2><div class="product-grid">${list.map(p => card(p, state.favorites[p.id])).join('')}</div>`;
 }
 
-window.toggleFav = async (pid, isFav) => {
-  if (!state.user) return toast('Faça login.', 'error');
-  await store.toggleFavorite(state.user.uid, pid, isFav);
-};
+window.toggleFav = async (pid, isFav) => { if (!state.user) return toast('Faça login.', 'error'); await store.toggleFavorite(state.user.uid, pid, isFav); };
+window.addCart = async (pid) => { if (!state.user) return navigate('login'); const r = state.cart[pid]; await store.updateCart(state.user.uid, { ...state.cart, [pid]: { qty: (r?.qty || 0) + 1 } }); toast('Adicionado!', 'success'); };
 
-window.addCart = async (pid) => {
-  if (!state.user) return navigate('login');
-  const itemRef = state.cart[pid];
-  await store.updateCart(state.user.uid, { ...state.cart, [pid]: { qty: (itemRef?.qty || 0) + 1 } });
-  toast('Adicionado!', 'success');
-};
-
-/* -------------------------- PRODUTO DETALHES -------------------------- */
 async function renderProductDetails(id) {
   const p = state.products.find(x => x.id === id);
   if (!p) return navigate('home');
-
-  appEl().innerHTML = `
-    <div class="card wide" style="max-width:900px; display:flex; gap:32px; flex-wrap:wrap; margin-bottom: 24px;">
-      <div style="flex:1; min-width:300px;"><img src="${p.image}" style="width:100%; border-radius:12px;" /></div>
-      <div style="flex:1; min-width:300px;">
-        <h2>${escapeHtml(p.name)}</h2>
-        <p class="muted mb-4">${escapeHtml(p.category)} • ${escapeHtml(p.rarity)}</p>
-        <div style="font-size:2rem; color:var(--primary); font-weight:800; margin-bottom:16px;">${brl(p.promoPrice || p.price)}</div>
-        <p class="mb-4">${escapeHtml(p.description)}</p>
-        <button class="btn btn-primary" onclick="window.addCart('${p.id}')" style="width:100%; padding:16px;">Adicionar ao Carrinho</button>
-      </div>
-    </div>
-    <div id="reviews-container" class="card wide" style="max-width:900px;">
-      <h3>Avaliações</h3>
-      <p class="muted">Carregando avaliações...</p>
-    </div>
-  `;
-
+  appEl().innerHTML = `<div class="card wide" style="display:flex; gap:32px; flex-wrap:wrap;"><div style="flex:1;"><img src="${p.image}" style="width:100%; border-radius:12px;"></div><div style="flex:1;"><h2>${escapeHtml(p.name)}</h2><div style="font-size:2rem; color:var(--primary);">${brl(p.promoPrice || p.price)}</div><p>${escapeHtml(p.description)}</p><button class="btn btn-primary" onclick="window.addCart('${p.id}')">Adicionar</button></div></div><div id="reviews-container" class="card wide mt-4"></div>`;
+  
   try {
     const reviews = await getProductReviews(p.id);
+    const list = reviews.length ? reviews.map(r => `<div style="border-bottom:1px solid var(--border); padding:12px 0;"><b>${escapeHtml(r.userName)}</b> - ${r.rating}⭐<p>${escapeHtml(r.comment)}</p></div>`).join('') : '<p>Nenhuma avaliação.</p>';
+    const form = state.user ? `<form id="rForm" class="mt-4"><select id="rRating" class="filter-select"><option value="5">5 ⭐</option><option value="4">4 ⭐</option><option value="3">3 ⭐</option><option value="2">2 ⭐</option><option value="1">1 ⭐</option></select><textarea id="rComment" class="mt-2" placeholder="Comentário" required></textarea><button class="btn btn-primary mt-2">Enviar</button></form>` : '<p>Faça login para avaliar.</p>';
+    document.getElementById('reviews-container').innerHTML = `<h3>Avaliações</h3>${form}<div class="mt-4">${list}</div>`;
     
-    let avgRating = 0;
-    if (reviews.length > 0) {
-      avgRating = reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length;
-    }
-
-    const canReview = !!state.user;
-    const starHtml = (r) => '⭐'.repeat(r) + '☆'.repeat(5 - r);
-
-    const reviewsList = reviews.length 
-      ? reviews.map(r => `
-          <div style="border-bottom: 1px solid var(--border); padding: 12px 0;">
-            <div style="font-weight: bold;">${escapeHtml(r.userName)}</div>
-            <div style="color: var(--warning); font-size: 0.9rem;">${starHtml(r.rating)}</div>
-            <p style="margin-top: 8px;">${escapeHtml(r.comment)}</p>
-          </div>
-        `).join('')
-      : '<p class="muted">Nenhuma avaliação ainda.</p>';
-
-    document.getElementById('reviews-container').innerHTML = `
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-        <h3>Avaliações (${reviews.length})</h3>
-        <div style="font-size:1.2rem; font-weight:bold; color:var(--warning);">
-          ${avgRating > 0 ? avgRating.toFixed(1) + ' ★' : ''}
-        </div>
-      </div>
-      
-      ${canReview ? `
-        <form id="reviewForm" style="margin-bottom: 24px; background: var(--bg-elev); padding: 16px; border-radius: 8px;">
-          <div class="form-group">
-            <label>Nota (1 a 5)</label>
-            <select id="rRating" class="filter-select" style="width:100%;">
-              <option value="5">5 - Excelente</option>
-              <option value="4">4 - Muito Bom</option>
-              <option value="3">3 - Bom</option>
-              <option value="2">2 - Regular</option>
-              <option value="1">1 - Ruim</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Comentário</label>
-            <textarea id="rComment" rows="2" style="width:100%; border-radius:8px; padding:8px; border:1px solid var(--border);" placeholder="O que você achou?" required></textarea>
-          </div>
-          <button type="submit" class="btn btn-primary" id="btnReview">Enviar Avaliação</button>
-        </form>
-      ` : `<p class="muted" style="margin-bottom:20px;"><a href="#" onclick="window.navigate('login')">Faça login</a> para avaliar.</p>`}
-
-      <div>${reviewsList}</div>
-    `;
-
-    if (canReview) {
-      document.getElementById('reviewForm').onsubmit = async (e) => {
+    if (state.user) {
+      $('#rForm').onsubmit = async (e) => {
         e.preventDefault();
-        const btn = document.getElementById('btnReview');
-        btn.disabled = true; btn.textContent = 'Enviando...';
-        try {
-          const rating = parseInt(document.getElementById('rRating').value);
-          const comment = document.getElementById('rComment').value;
-          await addReview(p.id, rating, comment);
-          toast('Avaliação enviada!', 'success');
-          renderProductDetails(p.id);
-        } catch (err) {
-          toast(err.message, 'error');
-          btn.disabled = false; btn.textContent = 'Enviar Avaliação';
-        }
+        await addReview(p.id, parseInt($('#rRating').value), $('#rComment').value);
+        toast('Avaliado!', 'success'); renderProductDetails(p.id);
       };
     }
-
-  } catch (err) {
-    console.error('Erro ao buscar reviews:', err);
-    document.getElementById('reviews-container').innerHTML = `<p class="alert alert-error">Erro ao carregar avaliações.</p>`;
-  }
+  } catch (e) { document.getElementById('reviews-container').innerHTML = `<p>Erro ao carregar.</p>`; }
 }
 
-/* ------------------------------ CONTA E PERFIL ------------------------ */
 async function renderAccount() {
-  if (!state.user) return navigate('login'); 
-  
+  if (!state.user) return navigate('login');
   const p = await getMyProfile();
-  const myOrders = await getMyOrders();
-  
+  const orders = await getMyOrders();
   const tab = state.profileTab;
 
   let content = '';
-  if (tab === 'data') {
-    content = `
-      <div class="form-group"><label>Nome</label><input type="text" value="${escapeHtml(p?.name || '')}" disabled /></div>
-      <div class="form-group"><label>E-mail</label><input type="text" value="${escapeHtml(state.user.email)}" disabled /></div>
-      <div class="form-group"><label>Perfil</label><input type="text" value="${state.isAdmin ? 'Vendedor' : 'Cliente'}" disabled /></div>
-    `;
-  } else if (tab === 'orders') {
-    content = myOrders.length ? myOrders.map(o => `
-      <div style="background:var(--bg-elev); padding:16px; border-radius:8px; margin-bottom:12px;">
-        <div class="flex-between mb-2"><strong>#${o.id.slice(0,6)}</strong> <span style="color:var(--primary);">${brl(o.total)}</span></div>
-        <p class="muted" style="font-size:0.8rem;">${formatDate(o.createdAt)} | Status: ${o.status.toUpperCase()}</p>
-      </div>
-    `).join('') : '<p class="muted">Nenhum pedido realizado.</p>';
-  } else if (tab === 'favorites') {
-    const favIds = Object.keys(state.favorites);
-    const favs = state.products.filter(prod => favIds.includes(prod.id));
-    content = favs.length ? `<div class="product-grid">${favs.map(f => `<div class="product-card"><div class="thumb"><img src="${f.image}"></div><div class="info"><div class="name">${escapeHtml(f.name)}</div></div></div>`).join('')}</div>` : '<p class="muted">Nenhum favorito.</p>';
-  } else if (tab === 'library') {
-    const bought = myOrders.filter(o => o.status === 'paid').flatMap(o => o.items);
-    content = bought.length ? `<div class="product-grid">${bought.map(i => {
-      const prod = state.products.find(x => x.id === i.productId);
-      return prod ? `<div class="product-card"><div class="thumb"><img src="${prod.image}"></div><div class="info"><div class="name">${escapeHtml(prod.name)}</div></div></div>` : '';
-    }).join('')}</div>` : '<p class="muted">Biblioteca vazia.</p>';
-  }
+  if (tab === 'data') content = `<p><b>Nome:</b> ${escapeHtml(p?.name || '')}</p><p><b>E-mail:</b> ${state.user.email}</p>`;
+  else if (tab === 'orders') content = orders.length ? orders.map(o => `<div style="border:1px solid #ccc; padding:10px; margin-bottom:8px;"><b>#${o.id.slice(0,6)}</b> - ${brl(o.total)} - ${o.status}</div>`).join('') : '<p>Sem pedidos.</p>';
+  else if (tab === 'favorites') content = `<div class="product-grid">${state.products.filter(prod => state.favorites[prod.id]).map(f => `<div class="product-card"><img src="${f.image}"><div class="info"><div class="name">${escapeHtml(f.name)}</div></div></div>`).join('')}</div>`;
 
-  appEl().innerHTML = `
-    <div class="card wide" style="max-width:900px;">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
-        <h2>Minha Conta</h2>
-        <button class="btn btn-outline" onclick="window.signOutUser()">Sair</button>
-      </div>
-      <div style="display:flex; gap:12px; border-bottom:1px solid var(--border); margin-bottom:24px; overflow-x:auto;">
-        <button class="tab-btn ${tab === 'data' ? 'active' : ''}" onclick="window.setProfileTab('data')">Dados</button>
-        <button class="tab-btn ${tab === 'orders' ? 'active' : ''}" onclick="window.setProfileTab('orders')">Pedidos</button>
-        <button class="tab-btn ${tab === 'favorites' ? 'active' : ''}" onclick="window.setProfileTab('favorites')">Favoritos</button>
-        <button class="tab-btn ${tab === 'library' ? 'active' : ''}" onclick="window.setProfileTab('library')">Biblioteca</button>
-      </div>
-      <div>${content}</div>
-    </div>
-  `;
+  appEl().innerHTML = `<div class="card wide"><h2>Minha Conta</h2><div style="display:flex; gap:10px; margin-bottom:20px;">
+    <button class="btn btn-outline" onclick="window.setProfileTab('data')">Dados</button>
+    <button class="btn btn-outline" onclick="window.setProfileTab('orders')">Pedidos</button>
+    <button class="btn btn-outline" onclick="window.setProfileTab('favorites')">Favoritos</button>
+  </div><div>${content}</div></div>`;
 }
-
 window.setProfileTab = (t) => { state.profileTab = t; renderAccount(); };
-window.signOutUser = async () => { await signOut(auth); toast('Saiu.', 'success'); };
 
-function renderFavorites() {
-  if (!state.user) return navigate('login');
-  state.profileTab = 'favorites';
-  renderAccount();
-}
-
-/* ------------------------------ LOGIN / REGISTRO ---------------------- */
 function renderLogin() {
-  appEl().innerHTML = `<div class="card"><h2>Entrar</h2><form id="form"><div class="form-group"><label>E-mail</label><input type="email" id="email" required></div><div class="form-group"><label>Senha</label><input type="password" id="pass" required></div><button class="btn btn-primary" style="width:100%">Entrar</button></form><p class="muted mt-4" style="text-align:center"><a href="#" onclick="window.navigate('register')">Cadastre-se</a></p></div>`;
-  $('#form').onsubmit = async (e) => { 
-    e.preventDefault(); 
-    try { await signInWithEmailAndPassword(auth, $('#email').value, $('#pass').value); } 
-    catch (err) { toast(err.message, 'error'); } 
-  };
+  appEl().innerHTML = `<div class="card"><h2>Entrar</h2><form id="f"><input type="email" id="e" placeholder="E-mail" required class="mt-2"><input type="password" id="p" placeholder="Senha" required class="mt-2"><button class="btn btn-primary mt-4" style="width:100%">Entrar</button></form><p class="mt-4"><a href="#" onclick="window.navigate('register')">Cadastre-se</a></p></div>`;
+  $('#f').onsubmit = async (e) => { e.preventDefault(); try { await signInWithEmailAndPassword(auth, $('#e').value, $('#p').value); } catch (err) { toast(err.message, 'error'); } };
 }
 
 function renderRegister() {
-  appEl().innerHTML = `<div class="card"><h2>Criar conta</h2><form id="form"><div class="form-group"><label>Nome</label><input type="text" id="name" required></div><div class="form-group"><label>E-mail</label><input type="email" id="email" required></div><div class="form-group"><label>Senha</label><input type="password" id="pass" required minlength="6"></div><button class="btn btn-primary" style="width:100%">Cadastrar</button></form></div>`;
-  $('#form').onsubmit = async (e) => { 
-    e.preventDefault(); 
-    try { 
-      const c = await createUserWithEmailAndPassword(auth, $('#email').value, $('#pass').value); 
-      await saveMyProfile({ name: $('#name').value }); 
-      toast('Conta criada!', 'success'); navigate('home'); 
-    } catch (err) { toast(err.message, 'error'); } 
-  };
+  appEl().innerHTML = `<div class="card"><h2>Criar conta</h2><form id="f"><input type="text" id="n" placeholder="Nome" required class="mt-2"><input type="email" id="e" placeholder="E-mail" required class="mt-2"><input type="password" id="p" placeholder="Senha" required class="mt-2"><button class="btn btn-primary mt-4" style="width:100%">Cadastrar</button></form></div>`;
+  $('#f').onsubmit = async (e) => { e.preventDefault(); try { const c = await createUserWithEmailAndPassword(auth, $('#e').value, $('#p').value); await saveMyProfile({ name: $('#n').value }); toast('Sucesso!', 'success'); navigate('home'); } catch (err) { toast(err.message, 'error'); } };
 }
 
-/* ------------------------------ CARRINHO E CHECKOUT ------------------- */
 function renderCart() {
   if (!state.user) return navigate('login');
   const items = Object.entries(state.cart);
@@ -340,78 +152,39 @@ function renderCart() {
   }).join('');
   appEl().innerHTML = `<h2 class="section-title">Carrinho</h2><div class="cart-list">${html}</div><div class="cart-summary mt-4"><div class="total">${brl(total)}</div><button class="btn btn-primary" onclick="window.navigate('checkout')">Checkout</button></div>`;
 }
-
-window.updateCartQty = async (pid, qty) => {
-  const newCart = { ...state.cart };
-  if (qty <= 0) delete newCart[pid]; else newCart[pid] = { qty };
-  await store.updateCart(state.user.uid, newCart);
-};
+window.updateCartQty = async (pid, qty) => { const c = { ...state.cart }; if (qty <= 0) delete c[pid]; else c[pid] = { qty }; await store.updateCart(state.user.uid, c); };
 
 async function renderCheckout() {
   if (!state.user) return navigate('login');
   const items = Object.entries(state.cart).map(([pid, i]) => { const p = state.products.find(x => x.id === pid); return { productId: pid, name: p.name, price: p.promoPrice || p.price, qty: i.qty }; });
-  const total = items.reduce((acc, curr) => acc + (curr.price * curr.qty), 0);
-  
-  appEl().innerHTML = `<div class="card wide"><h2>Finalizar Compra</h2><div class="pix-box mt-4"><span class="label">Chave PIX</span>${escapeHtml(state.settings.pixKey)}</div><div class="cart-summary mt-4"><div class="total">${brl(total)}</div><button class="btn btn-primary" id="btnFinish">Já Paguei</button></div></div>`;
-  
+  const total = items.reduce((a, c) => a + c.price * c.qty, 0);
+  appEl().innerHTML = `<div class="card wide"><h2>Checkout</h2><p>Total: <b>${brl(total)}</b></p><button class="btn btn-primary mt-4" id="btnFinish">Já Paguei</button></div>`;
   $('#btnFinish').onclick = async () => {
-    const btn = $('#btnFinish');
-    btn.disabled = true; btn.textContent = 'Processando...';
-
-    try {
-      // Usa a função importada do orders.js
-      await createOrder({ items, total, paymentMethod: 'PIX' });
-      
-      await store.updateCart(state.user.uid, {});
-      toast('Pedido feito com sucesso!', 'success'); 
-      navigate('account');
-      window.setProfileTab('orders');
-    } catch (error) {
-      console.error(error);
-      toast('Erro ao finalizar pedido.', 'error');
-      btn.disabled = false; btn.textContent = 'Já Paguei';
-    }
+    $('#btnFinish').disabled = true;
+    try { await createOrder({ items, total, paymentMethod: 'PIX' }); await store.updateCart(state.user.uid, {}); toast('Pedido feito!', 'success'); navigate('account'); window.setProfileTab('orders'); }
+    catch (e) { toast('Erro ao processar.', 'error'); $('#btnFinish').disabled = false; }
   };
 }
 
-/* ------------------------------ BOOTSTRAP ----------------------------- */
-state.unsubSettings = store.listenSettings((s) => { if (s.storeName) state.settings = s; renderHeader(); });
-state.unsubMaintenance = store.listenMaintenance((m) => {
-  state.maintenance = m;
-  if (m && !state.isAdmin) renderMaintenance();
-  else if (!m && state.route === 'maintenance') navigate('home');
-});
+/* ---------------- BOOTSTRAP ---------------- */
+store.listenSettings(s => { if (s.storeName) state.settings = s; renderHeader(); });
+store.listenMaintenance(m => { state.maintenance = m; if (m && !state.isAdmin) renderMaintenance(); else if (!m && state.route === 'maintenance') navigate('home'); });
 
 onAuthStateChanged(auth, async (user) => {
   state.user = user;
   if (user) {
-    state.isOwner = ADMINS.includes(user.email);
     state.isAdmin = ADMINS.includes(user.email);
-    
-    if (state.unsubCart) state.unsubCart();
-    state.unsubCart = store.listenCart(user.uid, (c) => { state.cart = c; renderHeader(); });
-
-    if (state.unsubFavs) state.unsubFavs();
-    state.unsubFavs = store.listenFavorites(user.uid, (f) => { state.favorites = f; if (state.route === 'home') renderHome(); });
-    
-    // Salva o perfil no Firestore silenciosamente
+    store.listenCart(user.uid, c => { state.cart = c; renderHeader(); });
+    store.listenFavorites(user.uid, f => { state.favorites = f; if (state.route === 'home') renderHome(); });
     await saveMyProfile({ name: user.displayName || 'Novo Cliente', email: user.email });
   } else {
     state.isAdmin = false; state.cart = {}; state.favorites = {};
-    if (state.unsubCart) state.unsubCart();
-    if (state.unsubFavs) state.unsubFavs();
     renderHeader();
   }
-
   if (state.maintenance && !state.isAdmin && state.route !== 'login') renderMaintenance();
   else if (state.route === 'home') renderHome(); else navigate(state.route, state.params);
 });
 
-if (state.unsubProducts) state.unsubProducts();
-state.unsubProducts = store.listenProducts((list) => {
-  state.products = list;
-  if (state.route === 'home') renderHome();
-});
-
+store.listenProducts(list => { state.products = list; if (state.route === 'home') renderHome(); });
 document.getElementById('year').textContent = new Date().getFullYear();
 navigate('home');
