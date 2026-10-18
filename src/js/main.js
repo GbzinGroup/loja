@@ -115,22 +115,117 @@ function renderCart() {
   const items = Object.entries(state.cart);
   if (!items.length) return appEl().innerHTML = `<div class="empty-state"><h3>Carrinho vazio</h3><button class="btn btn-outline mt-4" onclick="window.navigate('home')">Voltar</button></div>`;
   let total = 0;
-  const html = items.map(([pid, i]) => { const p = state.products.find(x => x.id === pid); if (!p) return ''; total += (p.promoPrice || p.price) * i.qty; return `<div class="card mb-4 flex-between"><div><div style="font-weight: 600;">${p.name}</div><div class="muted">${brl(p.promoPrice || p.price)}</div></div><div class="flex items-center gap-2"><button class="btn btn-outline" onclick="window.updateCartQty('${pid}', ${i.qty - 1})">-</button><span>${i.qty}</span><button class="btn btn-outline" onclick="window.updateCartQty('${pid}', ${i.qty + 1})">+</button></div></div>`; }).join('');
-  appEl().innerHTML = `<h2 class="section-title">Carrinho</h2>${html}<div class="card mt-6 flex-between items-center" style="background: var(--bg-elev-2);"><h3 style="margin: 0;">Total: ${brl(total)}</h3><button class="btn btn-primary" onclick="window.navigate('checkout')">Checkout</button></div>`;
+  const html = items.map(([pid, i]) => { const p = state.products.find(x => x.id === pid); if (!p) return ''; total += (p.promoPrice || p.price) * i.qty; return `<div class="cart-item flex-between"><div><div style="font-weight: 600;">${p.name}</div><div class="muted">${brl(p.promoPrice || p.price)}</div></div><div class="flex items-center gap-2"><button class="btn btn-outline" onclick="window.updateCartQty('${pid}', ${i.qty - 1})">-</button><span>${i.qty}</span><button class="btn btn-outline" onclick="window.updateCartQty('${pid}', ${i.qty + 1})">+</button></div></div>`; }).join('');
+  appEl().innerHTML = `<h2 class="section-title">Carrinho</h2>${html}<div class="cart-summary mt-6 flex-between items-center"><h3 style="margin: 0;">Total: ${brl(total)}</h3><button class="btn btn-primary" onclick="window.navigate('checkout')">Continuar</button></div>`;
 }
 
+// =====================================================================
+// CHECKOUT COM SISTEMA DE CUPOM
+// =====================================================================
 async function renderCheckout() {
   if (!state.user) return navigate('login');
-  const items = Object.entries(state.cart).map(([pid, i]) => { const p = state.products.find(x => x.id === pid); return { productId: pid, name: p.name, price: p.promoPrice || p.price, qty: i.qty }; });
-  const total = items.reduce((acc, curr) => acc + (curr.price * curr.qty), 0);
-  appEl().innerHTML = `<div class="card card-wide"><h2 class="mb-4">Finalizar Compra</h2><div class="form-group"><label>Chave PIX</label><input type="text" value="${state.settings.pixKey}" disabled style="font-family: monospace; color: var(--primary);"></div><button class="btn btn-primary mt-6" id="btnFinish" style="width: 100%;">Já realizei o Pagamento</button></div>`;
+  
+  const items = Object.entries(state.cart).map(([pid, i]) => { 
+    const p = state.products.find(x => x.id === pid); 
+    return { productId: pid, name: p.name, price: p.promoPrice || p.price, qty: i.qty }; 
+  });
+  
+  const totalOriginal = items.reduce((acc, curr) => acc + (curr.price * curr.qty), 0);
+  
+  // Variável local no escopo da renderização para guardar o desconto atual
+  window.checkoutDiscount = 0;
+  window.appliedCoupon = null;
+
+  appEl().innerHTML = `
+    <div class="card card-wide">
+      <h2 class="mb-4">Finalizar Compra</h2>
+      
+      <!-- Sistema de Cupom -->
+      <div style="background: var(--bg-elev); padding: 16px; border-radius: 8px; margin-bottom: 24px;">
+        <label style="font-weight: 600; margin-bottom: 8px; display: block;">Cupom de Desconto</label>
+        <div class="flex gap-2">
+          <input type="text" id="couponInput" placeholder="Digite o código" style="flex: 1; padding: 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); text-transform: uppercase;">
+          <button class="btn btn-outline" id="btnApplyCoupon">Aplicar</button>
+        </div>
+        <p id="couponMsg" class="muted mt-2" style="display: none; font-weight: 600;"></p>
+      </div>
+
+      <!-- Resumo de Valores -->
+      <div class="flex-between mb-2"><span class="muted">Subtotal:</span> <span>${brl(totalOriginal)}</span></div>
+      <div class="flex-between mb-2" id="discountRow" style="display: none; color: var(--success);"><span>Desconto:</span> <span id="discountValue">-R$ 0,00</span></div>
+      
+      <div class="form-group mt-4 pt-4" style="border-top: 1px solid var(--border);">
+        <label>Chave PIX</label>
+        <input type="text" value="${state.settings.pixKey}" disabled style="font-family: monospace; color: var(--primary);">
+      </div>
+
+      <div class="flex-between items-center mt-6">
+        <div>
+          <div class="muted" style="font-size: 0.85rem;">Total a Pagar</div>
+          <h3 style="font-size: 1.8rem; color: var(--primary);" id="finalTotal">${brl(totalOriginal)}</h3>
+        </div>
+        <button class="btn btn-primary" id="btnFinish" style="padding: 14px 32px;">Confirmar Pedido</button>
+      </div>
+    </div>`;
+
+  // Ação de Aplicar Cupom
+  $('#btnApplyCoupon').onclick = async () => {
+    const code = $('#couponInput').value.trim().toUpperCase();
+    if (!code) return toast('Digite um cupom.', 'error');
+    
+    const coupon = await store.validateCoupon(code);
+    const msgEl = $('#couponMsg');
+    
+    if (coupon && coupon.active) {
+      // Calcula o desconto
+      if (coupon.type === 'percent') {
+        window.checkoutDiscount = totalOriginal * (coupon.discount / 100);
+      } else {
+        window.checkoutDiscount = Math.min(coupon.discount, totalOriginal); // Desconto fixo não pode passar do total
+      }
+      window.appliedCoupon = coupon.code;
+
+      msgEl.style.display = 'block';
+      msgEl.style.color = 'var(--success)';
+      msgEl.innerHTML = `✅ Cupom <strong>${coupon.code}</strong> aplicado!`;
+      
+      $('#discountRow').style.display = 'flex';
+      $('#discountValue').innerText = `-${brl(window.checkoutDiscount)}`;
+      $('#finalTotal').innerText = brl(totalOriginal - window.checkoutDiscount);
+      
+    } else {
+      window.checkoutDiscount = 0;
+      window.appliedCoupon = null;
+      
+      msgEl.style.display = 'block';
+      msgEl.style.color = 'var(--danger)';
+      msgEl.innerHTML = `❌ Cupom inválido ou expirado.`;
+      
+      $('#discountRow').style.display = 'none';
+      $('#finalTotal').innerText = brl(totalOriginal);
+    }
+  };
+
+  // Ação de Finalizar Pedido
   $('#btnFinish').onclick = async () => {
-    await store.createOrder(state.user.uid, 'Cliente', items, total, 'PIX', '', [], null, false, null);
-    await store.updateCart(state.user.uid, {});
-    toast('Pedido feito!', 'success'); navigate('account');
+    const finalPrice = totalOriginal - window.checkoutDiscount;
+    const btn = $('#btnFinish'); btn.textContent = 'Processando...'; btn.disabled = true;
+    
+    try {
+      await store.createOrder(state.user.uid, 'Cliente', items, finalPrice, 'PIX', '', [], window.appliedCoupon, false, null);
+      await store.updateCart(state.user.uid, {});
+      toast('Pedido feito com sucesso!', 'success'); 
+      navigate('account');
+    } catch (err) {
+      toast('Erro ao finalizar.', 'error'); 
+      btn.textContent = 'Confirmar Pedido'; btn.disabled = false;
+    }
   };
 }
 
+// =====================================================================
+// BOOTSTRAP
+// =====================================================================
 state.unsubSettings = store.listenSettings((s) => { if (s.storeName) state.settings = s; renderHeader(); });
 state.unsubMaintenance = store.listenMaintenance((m) => { state.maintenance = m; if (m && !state.isAdmin) renderMaintenance(); else if (!m && state.route === 'maintenance') navigate('home'); });
 store.listenCoupons((c) => { state.coupons = c; });
