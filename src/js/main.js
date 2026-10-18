@@ -1,5 +1,5 @@
 /* =====================================================================
-   main.js — SPA Core Gbzin Shop
+   main.js — SPA Core Gbzin Shop (Atualizado para Firestore)
    ===================================================================== */
 import { auth } from './firebase-config.js';
 import { 
@@ -8,15 +8,20 @@ import {
   signOut, 
   onAuthStateChanged 
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-import { store } from './store.js';
-import { $, appEl, headerEl, brl, escapeHtml, toast, icons, maskCPF, formatDate } from './utils.js';
 
-// Importação dos novos módulos (Abas)
+import { store } from './store.js';
+import { $, appEl, headerEl, brl, escapeHtml, toast, formatDate } from './utils.js';
+
+// Importação dos módulos existentes
 import { renderAdmin } from './admin.js';
 import { renderSupport } from './support.js';
 import { renderProductForm } from './productForm.js';
 
-// LISTA DE ADMINS (Você e todos os e-mails enviados)
+// NOVOS MÓDULOS (baseados nas novas Firestore Rules)
+import { getProductReviews, addReview } from './reviews.js';
+import { getMyOrders } from './orders.js';
+import { getMyProfile, saveMyProfile } from './customers.js';
+
 const ADMINS = [
   "gabrielcordeirosilva2010@gmail.com",
   "10pedrin0@gmail.com",
@@ -34,7 +39,7 @@ const state = {
 
 /* ------------------------------ HEADER -------------------------------- */
 function renderHeader() {
-  if (state.maintenance && !state.isAdmin) return; // Não mostra header para clientes em manutenção
+  if (state.maintenance && !state.isAdmin) return;
 
   let account = '';
   if (state.user) {
@@ -65,7 +70,6 @@ function renderHeader() {
 function navigate(route, params = {}) {
   state.route = route; state.params = { ...state.params, ...params };
   
-  // Bloqueio de Manutenção
   if (state.maintenance && !state.isAdmin && route !== 'login' && route !== 'maintenance') {
      return renderMaintenance();
   }
@@ -79,7 +83,7 @@ function navigate(route, params = {}) {
     case 'favorites': return renderFavorites();
     case 'support': return renderSupport();
     case 'admin': return renderAdmin(state, params.tab || 'dashboard');
-    case 'product-form': return renderProductForm(state, params.id); // Chama o novo arquivo
+    case 'product-form': return renderProductForm(state, params.id);
     case 'cart': return renderCart();
     case 'checkout': return renderCheckout();
     case 'product-details': return renderProductDetails(params.id);
@@ -104,8 +108,6 @@ function renderMaintenance() {
 
 /* ------------------------------ HOME ---------------------------------- */
 function renderHome() {
-  let list = state.products.filter(p => p.active !== false);
-  
   const renderCard = (p, isFav) => `
     <div class="product-card">
       <div class="thumb" onclick="window.navigate('product-details', {id: '${p.id}'})" style="cursor:pointer">
@@ -147,8 +149,10 @@ window.addCart = async (pid) => {
 async function renderProductDetails(id) {
   const p = state.products.find(x => x.id === id);
   if (!p) return navigate('home');
+
+  // Renderiza a página com um loading inicial nas reviews
   appEl().innerHTML = `
-    <div class="card wide" style="max-width:900px; display:flex; gap:32px; flex-wrap:wrap;">
+    <div class="card wide" style="max-width:900px; display:flex; gap:32px; flex-wrap:wrap; margin-bottom: 24px;">
       <div style="flex:1; min-width:300px;"><img src="${p.image}" style="width:100%; border-radius:12px;" /></div>
       <div style="flex:1; min-width:300px;">
         <h2>${escapeHtml(p.name)}</h2>
@@ -158,39 +162,122 @@ async function renderProductDetails(id) {
         <button class="btn btn-primary" onclick="window.addCart('${p.id}')" style="width:100%; padding:16px;">Adicionar ao Carrinho</button>
       </div>
     </div>
+    <div id="reviews-container" class="card wide" style="max-width:900px;">
+      <h3>Avaliações</h3>
+      <p class="muted">Carregando avaliações...</p>
+    </div>
   `;
+
+  try {
+    // Busca avaliações usando a nova regra de leitura pública
+    const reviews = await getProductReviews(p.id);
+    
+    let avgRating = 0;
+    if (reviews.length > 0) {
+      avgRating = reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length;
+    }
+
+    const canReview = !!state.user;
+    const starHtml = (r) => '⭐'.repeat(r) + '☆'.repeat(5 - r);
+
+    const reviewsList = reviews.length 
+      ? reviews.map(r => `
+          <div style="border-bottom: 1px solid var(--border); padding: 12px 0;">
+            <div style="font-weight: bold;">${escapeHtml(r.userName)}</div>
+            <div style="color: var(--warning); font-size: 0.9rem;">${starHtml(r.rating)}</div>
+            <p style="margin-top: 8px;">${escapeHtml(r.comment)}</p>
+          </div>
+        `).join('')
+      : '<p class="muted">Nenhuma avaliação ainda.</p>';
+
+    document.getElementById('reviews-container').innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+        <h3>Avaliações (${reviews.length})</h3>
+        <div style="font-size:1.2rem; font-weight:bold; color:var(--warning);">
+          ${avgRating > 0 ? avgRating.toFixed(1) + ' ★' : ''}
+        </div>
+      </div>
+      
+      ${canReview ? `
+        <form id="reviewForm" style="margin-bottom: 24px; background: var(--bg-elev); padding: 16px; border-radius: 8px;">
+          <div class="form-group">
+            <label>Nota (1 a 5)</label>
+            <select id="rRating" class="filter-select" style="width:100%;">
+              <option value="5">5 - Excelente</option>
+              <option value="4">4 - Muito Bom</option>
+              <option value="3">3 - Bom</option>
+              <option value="2">2 - Regular</option>
+              <option value="1">1 - Ruim</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Comentário</label>
+            <textarea id="rComment" rows="2" style="width:100%; border-radius:8px; padding:8px; border:1px solid var(--border);" placeholder="O que você achou?" required></textarea>
+          </div>
+          <button type="submit" class="btn btn-primary" id="btnReview">Enviar Avaliação</button>
+        </form>
+      ` : `<p class="muted" style="margin-bottom:20px;"><a href="#" onclick="window.navigate('login')">Faça login</a> para avaliar.</p>`}
+
+      <div>${reviewsList}</div>
+    `;
+
+    // Evento de envio da avaliação
+    if (canReview) {
+      document.getElementById('reviewForm').onsubmit = async (e) => {
+        e.preventDefault();
+        const btn = document.getElementById('btnReview');
+        btn.disabled = true; btn.textContent = 'Enviando...';
+        try {
+          await addReview(p.id, parseInt(document.getElementById('rRating').value), document.getElementById('rComment').value);
+          toast('Avaliação enviada!', 'success');
+          renderProductDetails(p.id); // Recarrega a tela
+        } catch (err) {
+          toast(err.message, 'error');
+          btn.disabled = false; btn.textContent = 'Enviar Avaliação';
+        }
+      };
+    }
+
+  } catch (err) {
+    console.error('Erro ao buscar reviews:', err);
+    document.getElementById('reviews-container').innerHTML = `<p class="alert alert-error">Erro ao carregar avaliações.</p>`;
+  }
 }
 
 /* ------------------------------ CONTA E PERFIL ------------------------ */
 async function renderAccount() {
   if (!state.user) return navigate('login'); 
-  const p = await store.getCustomerProfile(state.user.uid); 
-  const myOrders = await store.getMyOrders(state.user.uid);
+  
+  // Puxa os dados do cliente (Nova API)
+  const p = await getMyProfile();
+  // Puxa os pedidos (Nova API)
+  const myOrders = await getMyOrders();
+  
   const tab = state.profileTab;
 
   let content = '';
   if (tab === 'data') {
     content = `
-      <div class="form-group"><label>Nome</label><input type="text" value="${p?.name || ''}" disabled /></div>
-      <div class="form-group"><label>E-mail</label><input type="text" value="${state.user.email}" disabled /></div>
+      <div class="form-group"><label>Nome</label><input type="text" value="${escapeHtml(p?.name || '')}" disabled /></div>
+      <div class="form-group"><label>E-mail</label><input type="text" value="${escapeHtml(state.user.email)}" disabled /></div>
       <div class="form-group"><label>Perfil</label><input type="text" value="${state.isAdmin ? 'Vendedor' : 'Cliente'}" disabled /></div>
     `;
   } else if (tab === 'orders') {
     content = myOrders.length ? myOrders.map(o => `
       <div style="background:var(--bg-elev); padding:16px; border-radius:8px; margin-bottom:12px;">
         <div class="flex-between mb-2"><strong>#${o.id.slice(0,6)}</strong> <span style="color:var(--primary);">${brl(o.total)}</span></div>
-        <p class="muted" style="font-size:0.8rem;">${formatDate(o.createdAt)} | Status: ${o.status}</p>
+        <p class="muted" style="font-size:0.8rem;">${formatDate(o.createdAt)} | Status: ${o.status.toUpperCase()}</p>
       </div>
-    `).join('') : '<p class="muted">Nenhum pedido.</p>';
+    `).join('') : '<p class="muted">Nenhum pedido realizado.</p>';
   } else if (tab === 'favorites') {
     const favIds = Object.keys(state.favorites);
     const favs = state.products.filter(prod => favIds.includes(prod.id));
-    content = favs.length ? `<div class="product-grid">${favs.map(f => `<div class="product-card"><div class="thumb"><img src="${f.image}"></div><div class="info"><div class="name">${f.name}</div></div></div>`).join('')}</div>` : '<p class="muted">Nenhum favorito.</p>';
+    content = favs.length ? `<div class="product-grid">${favs.map(f => `<div class="product-card"><div class="thumb"><img src="${f.image}"></div><div class="info"><div class="name">${escapeHtml(f.name)}</div></div></div>`).join('')}</div>` : '<p class="muted">Nenhum favorito.</p>';
   } else if (tab === 'library') {
     const bought = myOrders.filter(o => o.status === 'paid').flatMap(o => o.items);
     content = bought.length ? `<div class="product-grid">${bought.map(i => {
       const prod = state.products.find(x => x.id === i.productId);
-      return prod ? `<div class="product-card"><div class="thumb"><img src="${prod.image}"></div><div class="info"><div class="name">${prod.name}</div></div></div>` : '';
+      return prod ? `<div class="product-card"><div class="thumb"><img src="${prod.image}"></div><div class="info"><div class="name">${escapeHtml(prod.name)}</div></div></div>` : '';
     }).join('')}</div>` : '<p class="muted">Biblioteca vazia.</p>';
   }
 
@@ -236,7 +323,7 @@ function renderRegister() {
     e.preventDefault(); 
     try { 
       const c = await createUserWithEmailAndPassword(auth, $('#email').value, $('#pass').value); 
-      await store.saveCustomerProfile(c.user, {name: $('#name').value}); 
+      await saveMyProfile({ name: $('#name').value }); // Usa o novo módulo customers.js
       toast('Conta criada!', 'success'); navigate('home'); 
     } catch (err) { toast(err.message, 'error'); } 
   };
@@ -267,11 +354,27 @@ async function renderCheckout() {
   if (!state.user) return navigate('login');
   const items = Object.entries(state.cart).map(([pid, i]) => { const p = state.products.find(x => x.id === pid); return { productId: pid, name: p.name, price: p.promoPrice || p.price, qty: i.qty }; });
   const total = items.reduce((acc, curr) => acc + (curr.price * curr.qty), 0);
+  
   appEl().innerHTML = `<div class="card wide"><h2>Finalizar Compra</h2><div class="pix-box mt-4"><span class="label">Chave PIX</span>${escapeHtml(state.settings.pixKey)}</div><div class="cart-summary mt-4"><div class="total">${brl(total)}</div><button class="btn btn-primary" id="btnFinish">Já Paguei</button></div></div>`;
+  
   $('#btnFinish').onclick = async () => {
-    await store.createOrder(state.user.uid, 'Cliente', items, total, 'PIX', '', [], null, false, null);
-    await store.updateCart(state.user.uid, {});
-    toast('Pedido feito!', 'success'); navigate('account');
+    const btn = $('#btnFinish');
+    btn.disabled = true; btn.textContent = 'Processando...';
+
+    try {
+      // Usa a nova API do orders.js que se comunica direto com o Firestore (e valida o userId)
+      const { createOrder } = await import('./orders.js'); 
+      await createOrder({ items, total, paymentMethod: 'PIX' });
+      
+      await store.updateCart(state.user.uid, {});
+      toast('Pedido feito com sucesso!', 'success'); 
+      navigate('account');
+      window.setProfileTab('orders');
+    } catch (error) {
+      console.error(error);
+      toast('Erro ao finalizar pedido.', 'error');
+      btn.disabled = false; btn.textContent = 'Já Paguei';
+    }
   };
 }
 
@@ -295,7 +398,8 @@ onAuthStateChanged(auth, async (user) => {
     if (state.unsubFavs) state.unsubFavs();
     state.unsubFavs = store.listenFavorites(user.uid, (f) => { state.favorites = f; if (state.route === 'home') renderHome(); });
     
-    await store.saveCustomerProfile(user);
+    // Salva o perfil no Firestore silenciosamente
+    await saveMyProfile({ name: user.displayName || 'Novo Cliente', email: user.email });
   } else {
     state.isAdmin = false; state.cart = {}; state.favorites = {};
     if (state.unsubCart) state.unsubCart();
