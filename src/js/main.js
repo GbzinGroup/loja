@@ -1,5 +1,5 @@
 /* =====================================================================
-   main.js — SPA Core Gbzin Shop (Atualizado para Firestore)
+   main.js — SPA Core Gbzin Shop (Corrigido e Unificado)
    ===================================================================== */
 import { auth } from './firebase-config.js';
 import { 
@@ -16,11 +16,6 @@ import { $, appEl, headerEl, brl, escapeHtml, toast, formatDate } from './utils.
 import { renderAdmin } from './admin.js';
 import { renderSupport } from './support.js';
 import { renderProductForm } from './productForm.js';
-
-// NOVOS MÓDULOS (baseados nas novas Firestore Rules)
-import { getProductReviews, addReview } from './reviews.js';
-import { getMyOrders } from './orders.js';
-import { getMyProfile, saveMyProfile } from './customers.js';
 
 const ADMINS = [
   "gabrielcordeirosilva2010@gmail.com",
@@ -150,7 +145,6 @@ async function renderProductDetails(id) {
   const p = state.products.find(x => x.id === id);
   if (!p) return navigate('home');
 
-  // Renderiza a página com um loading inicial nas reviews
   appEl().innerHTML = `
     <div class="card wide" style="max-width:900px; display:flex; gap:32px; flex-wrap:wrap; margin-bottom: 24px;">
       <div style="flex:1; min-width:300px;"><img src="${p.image}" style="width:100%; border-radius:12px;" /></div>
@@ -169,8 +163,8 @@ async function renderProductDetails(id) {
   `;
 
   try {
-    // Busca avaliações usando a nova regra de leitura pública
-    const reviews = await getProductReviews(p.id);
+    // Usa a função do store.js que já está configurada para o Firestore
+    const reviews = await store.getReviews(p.id);
     
     let avgRating = 0;
     if (reviews.length > 0) {
@@ -221,14 +215,16 @@ async function renderProductDetails(id) {
       <div>${reviewsList}</div>
     `;
 
-    // Evento de envio da avaliação
     if (canReview) {
       document.getElementById('reviewForm').onsubmit = async (e) => {
         e.preventDefault();
         const btn = document.getElementById('btnReview');
         btn.disabled = true; btn.textContent = 'Enviando...';
         try {
-          await addReview(p.id, parseInt(document.getElementById('rRating').value), document.getElementById('rComment').value);
+          const rating = parseInt(document.getElementById('rRating').value);
+          const comment = document.getElementById('rComment').value;
+          // Usa a função do store.js
+          await store.addReview(p.id, state.user.uid, state.user.displayName || 'Cliente', rating, comment);
           toast('Avaliação enviada!', 'success');
           renderProductDetails(p.id); // Recarrega a tela
         } catch (err) {
@@ -248,10 +244,9 @@ async function renderProductDetails(id) {
 async function renderAccount() {
   if (!state.user) return navigate('login'); 
   
-  // Puxa os dados do cliente (Nova API)
-  const p = await getMyProfile();
-  // Puxa os pedidos (Nova API)
-  const myOrders = await getMyOrders();
+  // Usa as funções do store.js
+  const p = await store.getCustomerProfile(state.user.uid);
+  const myOrders = await store.getMyOrders(state.user.uid);
   
   const tab = state.profileTab;
 
@@ -323,7 +318,8 @@ function renderRegister() {
     e.preventDefault(); 
     try { 
       const c = await createUserWithEmailAndPassword(auth, $('#email').value, $('#pass').value); 
-      await saveMyProfile({ name: $('#name').value }); // Usa o novo módulo customers.js
+      // Salva o perfil usando o store.js
+      await store.saveCustomerProfile(c.user, { name: $('#name').value }); 
       toast('Conta criada!', 'success'); navigate('home'); 
     } catch (err) { toast(err.message, 'error'); } 
   };
@@ -362,9 +358,22 @@ async function renderCheckout() {
     btn.disabled = true; btn.textContent = 'Processando...';
 
     try {
-      // Usa a nova API do orders.js que se comunica direto com o Firestore (e valida o userId)
-      const { createOrder } = await import('./orders.js'); 
-      await createOrder({ items, total, paymentMethod: 'PIX' });
+      // Usa a função do store.js que já lida com o Firestore e baixa o estoque no RTDB
+      const p = await store.getCustomerProfile(state.user.uid);
+      const customerName = p?.name || state.user.displayName || 'Cliente';
+      
+      await store.createOrder(
+        state.user.uid, 
+        customerName, 
+        items, 
+        total, 
+        'PIX', 
+        '', // CPF
+        [], // Extras
+        null, // Cupom
+        false, // isGift
+        null // giftTo
+      );
       
       await store.updateCart(state.user.uid, {});
       toast('Pedido feito com sucesso!', 'success'); 
@@ -399,7 +408,7 @@ onAuthStateChanged(auth, async (user) => {
     state.unsubFavs = store.listenFavorites(user.uid, (f) => { state.favorites = f; if (state.route === 'home') renderHome(); });
     
     // Salva o perfil no Firestore silenciosamente
-    await saveMyProfile({ name: user.displayName || 'Novo Cliente', email: user.email });
+    await store.saveCustomerProfile(user, { name: user.displayName || 'Novo Cliente', email: user.email });
   } else {
     state.isAdmin = false; state.cart = {}; state.favorites = {};
     if (state.unsubCart) state.unsubCart();
@@ -407,6 +416,7 @@ onAuthStateChanged(auth, async (user) => {
     renderHeader();
   }
 
+  // Força o carregamento da tela (Evita tela preta)
   if (state.maintenance && !state.isAdmin && state.route !== 'login') renderMaintenance();
   else if (state.route === 'home') renderHome(); else navigate(state.route, state.params);
 });
