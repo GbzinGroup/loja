@@ -17,6 +17,7 @@ const ADMINS = [
   "10pedrin0@gmail.com",
   "lucaslyra875@gmail.com",
   "gbzinstudio@gmail.com"
+  "Voabernas@gmail.com"
 ];
 
 const EXTRAS = [
