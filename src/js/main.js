@@ -11,7 +11,13 @@ import {
 import { store } from './store.js';
 import { $, appEl, headerEl, brl, escapeHtml, toast, icons, maskCPF, formatDate } from './utils.js';
 
-const ADMIN_EMAIL = "gabrielcordeirosilva2010@gmail.com";
+// LISTA DE ADMINS (Você e todos os e-mails enviados)
+const ADMINS = [
+  "gabrielcordeirosilva2010@gmail.com",
+  "10pedrin0@gmail.com",
+  "lucaslyra875@gmail.com",
+  "gbzinstudio@gmail.com"
+];
 
 const EXTRAS = [
   { id: '1', name: 'Suporte rápido', price: 5.00, desc: 'Atendimento prioritário.' },
@@ -562,32 +568,6 @@ async function renderAdmin(tab = 'dashboard') {
       </div>
     `;
   }
-  else if (tab === 'team' && state.isOwner) {
-    const vendedoresList = Object.entries(state.vendedores).map(([key, v]) => `
-      <div class="flex-between" style="background:var(--bg-elev); padding:16px; border-radius:8px; margin-bottom:12px; border:1px solid var(--border);">
-        <div style="display:flex; gap:12px; align-items:center;">
-          <div style="width:40px; height:40px; background:var(--primary-soft); border-radius:50%; display:grid; place-items:center; color:var(--primary); font-weight:bold;">${v.nome.charAt(0)}</div>
-          <div><strong>${escapeHtml(v.nome)}</strong> <br><span class="muted">${escapeHtml(v.email)}</span></div>
-        </div>
-        <button class="btn btn-danger" style="padding:6px 12px; font-size:.8rem;" data-del-vend="${key}">Remover</button>
-      </div>
-    `).join('');
-
-    content = `
-      <div class="card" style="max-width:600px; margin-bottom:24px; border-color:var(--primary);">
-        <h3>Adicionar Vendedor</h3>
-        <p class="muted mb-4">O e-mail inserido terá acesso ao painel. Certifique-se de que ele já criou uma conta no site.</p>
-        <form id="addVendForm" style="display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap;">
-          <div class="form-group" style="flex:1; margin:0;"><label>Nome</label><input type="text" id="vNome" required /></div>
-          <div class="form-group" style="flex:1; margin:0;"><label>E-mail</label><input type="email" id="vEmail" required /></div>
-          <div class="form-group" style="flex:1; margin:0;"><label>UID (Opcional)</label><input type="text" id="vUid" placeholder="Deixe vazio se não souber" /></div>
-          <button type="submit" class="btn btn-primary">Adicionar</button>
-        </form>
-      </div>
-      <h3>Equipe Atual</h3>
-      <div class="mt-4">${vendedoresList || '<p class="muted">Apenas você tem acesso no momento.</p>'}</div>
-    `;
-  }
 
   const tabsHtml = `
     <div style="margin-bottom:24px; border-bottom:1px solid var(--border); display:flex; gap:24px; overflow-x:auto;">
@@ -596,7 +576,6 @@ async function renderAdmin(tab = 'dashboard') {
       <button class="tab-btn ${tab === 'orders' ? 'active' : ''}" onclick="window.navigate('admin', {tab: 'orders'})">Pedidos</button>
       <button class="tab-btn ${tab === 'coupons' ? 'active' : ''}" onclick="window.navigate('admin', {tab: 'coupons'})">Cupons</button>
       <button class="tab-btn ${tab === 'settings' ? 'active' : ''}" onclick="window.navigate('admin', {tab: 'settings'})">Configurações</button>
-      ${state.isOwner ? `<button class="tab-btn ${tab === 'team' ? 'active' : ''}" onclick="window.navigate('admin', {tab: 'team'})">Vendedores</button>` : ''}
     </div>
   `;
 
@@ -628,21 +607,6 @@ async function renderAdmin(tab = 'dashboard') {
     toast('Cupom criado!', 'success');
     renderAdmin('coupons');
   });
-
-  if (tab === 'team' && state.isOwner) {
-    $('#addVendForm')?.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const email = $('#vEmail').value.trim();
-      const uid = $('#vUid').value.trim();
-      if (email === ADMIN_EMAIL) return toast('Você já é o dono.', 'error');
-      
-      await store.addVendedor(email, $('#vNome').value.trim(), uid);
-      toast('Adicionado!', 'success'); e.target.reset();
-    });
-    appEl().querySelectorAll('[data-del-vend]').forEach((b) => b.addEventListener('click', async () => {
-      if (confirm('Remover vendedor?')) await store.removeVendedor(b.getAttribute('data-del-vend'));
-    }));
-  }
 }
 
 /* -------------------------- FORM PRODUTO ------------------------------ */
@@ -757,16 +721,14 @@ state.unsubCoupons = store.listenCoupons((c) => {
 onAuthStateChanged(auth, async (user) => {
   state.user = user;
   if (user) {
-    state.isOwner = (user.email === ADMIN_EMAIL);
+    // Verifica se o e-mail do usuário está na lista fixa de ADMINS
+    state.isOwner = ADMINS.includes(user.email);
+    state.isAdmin = ADMINS.includes(user.email); 
     
+    // Escuta a lista de vendedores apenas para exibição no painel (não afeta permissões)
     if (state.unsubVendedores) state.unsubVendedores();
     state.unsubVendedores = store.listenVendedores((v) => {
       state.vendedores = v;
-      // Verifica se o usuário logado é Admin (Dono ou está na lista de vendedores via UID ou Email)
-      const safeEmail = user.email.replace(/\./g, ',');
-      const isVendedor = v[user.uid] !== undefined || v[safeEmail] !== undefined;
-      state.isAdmin = state.isOwner || isVendedor;
-      
       if (state.route === 'admin') renderAdmin(state.params.tab || 'dashboard');
       renderHeader();
     });
@@ -779,7 +741,7 @@ onAuthStateChanged(auth, async (user) => {
     
     await store.saveCustomerProfile(user);
   } else {
-    state.isAdmin = false; state.cart = {}; state.vendedores = {}; state.favorites = {};
+    state.isAdmin = false; state.isOwner = false; state.cart = {}; state.vendedores = {}; state.favorites = {};
     if (state.unsubCart) state.unsubCart();
     if (state.unsubVendedores) state.unsubVendedores();
     if (state.unsubFavs) state.unsubFavs();
