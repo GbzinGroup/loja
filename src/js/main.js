@@ -15,7 +15,12 @@ const ADMIN_EMAIL = "gabrielcordeirosilva2010@gmail.com";
 
 const state = {
   route: 'home', params: {}, user: null, isAdmin: false, isOwner: false,
-  products: [], cart: {}, vendedores: {}, unsubCart: null, unsubVendedores: null, unsubProducts: null
+  products: [], cart: {}, vendedores: {}, 
+  settings: { 
+    pixKey: 'a7a8c1e6-5a54-45a1-a186-784fb6aced6c', 
+    pixName: 'Gabriel Cordeiro' 
+  },
+  unsubCart: null, unsubVendedores: null, unsubProducts: null, unsubSettings: null
 };
 
 /* ------------------------------ HEADER -------------------------------- */
@@ -157,6 +162,7 @@ async function renderAdmin(tab = 'dashboard') {
           <button class="tab-btn" onclick="window.navigate('admin', {tab: 'dashboard'})">Visão Geral</button>
           <button class="tab-btn" onclick="window.navigate('admin', {tab: 'products'})">Produtos</button>
           <button class="tab-btn active" onclick="window.navigate('admin', {tab: 'orders'})">Pedidos</button>
+          <button class="tab-btn" onclick="window.navigate('admin', {tab: 'settings'})">Configurações</button>
           ${state.isOwner ? `<button class="tab-btn" onclick="window.navigate('admin', {tab: 'team'})">Vendedores</button>` : ''}
         </div>
         ${content}
@@ -198,6 +204,7 @@ async function renderAdmin(tab = 'dashboard') {
           <button class="tab-btn" onclick="window.navigate('admin', {tab: 'dashboard'})">Visão Geral</button>
           <button class="tab-btn" onclick="window.navigate('admin', {tab: 'products'})">Produtos</button>
           <button class="tab-btn active" onclick="window.navigate('admin', {tab: 'orders'})">Pedidos</button>
+          <button class="tab-btn" onclick="window.navigate('admin', {tab: 'settings'})">Configurações</button>
           ${state.isOwner ? `<button class="tab-btn" onclick="window.navigate('admin', {tab: 'team'})">Vendedores</button>` : ''}
         </div>
         ${content}
@@ -215,6 +222,27 @@ async function renderAdmin(tab = 'dashboard') {
       container.innerHTML = `<div class="alert alert-error">Erro ao buscar pedidos. Verifique suas regras do Firestore.</div>`;
     }
     return; 
+  }
+  else if (tab === 'settings' && state.isAdmin) {
+    content = `
+      <div class="card wide" style="max-width:600px;">
+        <h3>Configurações da Loja</h3>
+        <p class="muted mb-4">Defina a chave PIX que será exibida para os clientes no Checkout.</p>
+        <form id="settingsForm">
+          <div class="form-group">
+            <label>Chave PIX</label>
+            <input type="text" id="setPixKey" required value="${escapeHtml(state.settings.pixKey || '')}" placeholder="Chave aleatória, e-mail, CPF..." />
+          </div>
+          <div class="form-group">
+            <label>Nome do Beneficiário</label>
+            <input type="text" id="setPixName" required value="${escapeHtml(state.settings.pixName || '')}" placeholder="Ex: Gabriel Cordeiro" />
+          </div>
+          <div class="form-actions" style="margin-top:24px;">
+            <button type="submit" class="btn btn-primary">Salvar Configurações</button>
+          </div>
+        </form>
+      </div>
+    `;
   }
   else if (tab === 'team' && state.isOwner) {
     const vendedoresList = Object.values(state.vendedores).map(v => `
@@ -248,6 +276,7 @@ async function renderAdmin(tab = 'dashboard') {
         <button class="tab-btn ${tab === 'dashboard' ? 'active' : ''}" onclick="window.navigate('admin', {tab: 'dashboard'})">Visão Geral</button>
         <button class="tab-btn ${tab === 'products' ? 'active' : ''}" onclick="window.navigate('admin', {tab: 'products'})">Produtos</button>
         <button class="tab-btn ${tab === 'orders' ? 'active' : ''}" onclick="window.navigate('admin', {tab: 'orders'})">Pedidos</button>
+        <button class="tab-btn ${tab === 'settings' ? 'active' : ''}" onclick="window.navigate('admin', {tab: 'settings'})">Configurações</button>
         ${state.isOwner ? `<button class="tab-btn ${tab === 'team' ? 'active' : ''}" onclick="window.navigate('admin', {tab: 'team'})">Vendedores</button>` : ''}
       </div>
       ${content}
@@ -263,6 +292,15 @@ async function renderAdmin(tab = 'dashboard') {
   appEl().querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', async () => {
     if (confirm('Excluir produto?')) { await store.deleteProduct(b.getAttribute('data-del')); toast('Excluído.', 'success'); }
   }));
+
+  $('#settingsForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    await store.saveSettings({
+      pixKey: $('#setPixKey').value.trim(),
+      pixName: $('#setPixName').value.trim()
+    });
+    toast('Configurações salvas com sucesso!', 'success');
+  });
 
   if (tab === 'team' && state.isOwner) {
     $('#addVendForm')?.addEventListener('submit', async (e) => {
@@ -448,6 +486,9 @@ function renderCheckout() {
   const items = Object.entries(state.cart).map(([pid, i]) => { const p = state.products.find(x => x.id === pid); return { productId: pid, name: p.name, price: p.price, qty: i.qty }; });
   const total = items.reduce((acc, curr) => acc + (curr.price * curr.qty), 0);
 
+  const pixKey = state.settings.pixKey || 'a7a8c1e6-5a54-45a1-a186-784fb6aced6c';
+  const pixName = state.settings.pixName || 'Gabriel Cordeiro';
+
   appEl().innerHTML = `
     <div class="card wide" style="max-width:800px;">
       <h2>Finalizar Compra</h2>
@@ -466,9 +507,9 @@ function renderCheckout() {
           <h3 class="mb-4">Pagamento</h3>
           <div class="pix-box" style="margin-top:0;">
             <span class="label">Chave PIX</span>
-            00020126580014BR.GOV.BCB.PIX0136chave-pix-de-teste-123456789
+            ${escapeHtml(pixKey)}
           </div>
-          <p class="muted" style="font-size:0.8rem;">O vendedor aprovará seu pedido após a confirmação do PIX.</p>
+          <p class="muted" style="font-size:0.8rem;">Beneficiário: <strong>${escapeHtml(pixName)}</strong>. O vendedor aprovará seu pedido após a confirmação.</p>
         </div>
       </div>
 
@@ -509,6 +550,12 @@ function renderCheckout() {
 }
 
 /* ------------------------------ BOOTSTRAP ----------------------------- */
+// Escuta as configurações em tempo real para o PIX
+state.unsubSettings = store.listenSettings((s) => {
+  if (s.pixKey) state.settings = s;
+  if (state.route === 'checkout') renderCheckout();
+});
+
 onAuthStateChanged(auth, async (user) => {
   state.user = user;
   if (user) {
