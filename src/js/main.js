@@ -13,7 +13,6 @@ import { $, appEl, headerEl, brl, escapeHtml, toast, icons, maskCPF, formatDate 
 
 const ADMIN_EMAIL = "gabrielcordeirosilva2010@gmail.com";
 
-// Lista fixa de serviços adicionais
 const EXTRAS = [
   { id: '1', name: 'Suporte rápido', price: 5.00, desc: 'Atendimento prioritário.' },
   { id: '2', name: 'Instalação assistida', price: 7.00, desc: 'Ajuda na configuração.' },
@@ -88,7 +87,6 @@ window.navigate = navigate;
 function renderHome() {
   let list = state.products.filter(p => p.active !== false);
   
-  // Filtros
   if (state.search) list = list.filter(p => p.name.toLowerCase().includes(state.search.toLowerCase()));
   if (state.filterCategory) list = list.filter(p => p.category === state.filterCategory);
   if (state.filterRarity) list = list.filter(p => p.rarity === state.filterRarity);
@@ -98,11 +96,9 @@ function renderHome() {
   const categories = [...new Set(state.products.map(p => p.category).filter(Boolean))];
   const rarities = ['Comum', 'Rara', 'Épica', 'Lendária'];
 
-  // Seções (só aparecem se não houver filtro ativo)
   const isFiltering = state.search || state.filterCategory || state.filterRarity || state.filterPrice;
   
   const renderCard = (p, isFav) => {
-    const finalPrice = p.promoPrice > 0 ? p.promoPrice : p.price;
     return `
       <div class="product-card">
         <div class="thumb" onclick="window.navigate('product-details', {id: '${p.id}'})" style="cursor:pointer">
@@ -224,8 +220,9 @@ async function renderProductDetails(id) {
 
   $('#reviewForm')?.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const profile = await store.getCustomerProfile(state.user.uid);
-    await store.addReview(id, state.user.uid, profile?.name || 'Cliente', Number($('#revRating').value), $('#revComment').value);
+    // Pega o nome direto do Auth, para não depender do Firestore (evita erro de permissão)
+    const userName = state.user.displayName || state.user.email.split('@')[0] || 'Cliente';
+    await store.addReview(id, state.user.uid, userName, Number($('#revRating').value), $('#revComment').value);
     toast('Avaliação enviada!', 'success');
     renderProductDetails(id);
   });
@@ -346,14 +343,24 @@ async function renderCheckout() {
   };
 
   $('#btnFinish').onclick = async () => {
+    const btn = $('#btnFinish'); btn.textContent = 'Processando...'; btn.disabled = true;
     const extrasSelected = Array.from(document.querySelectorAll('.extra-check:checked')).map(c => EXTRAS.find(e => e.id === c.value));
     const totalExtras = extrasSelected.reduce((a, b) => a + b.price, 0);
     const finalTotal = totalProducts + totalExtras - (window.currentDiscount || 0);
     
-    await store.createOrder(state.user.uid, 'Cliente', items, finalTotal, 'PIX', '', extrasSelected, null, false, null);
-    await store.updateCart(state.user.uid, {});
-    toast('Pedido realizado!', 'success');
-    navigate('account');
+    try {
+      // Pega o nome direto do Auth para evitar erro de permissão no Firestore
+      const customerName = state.user.displayName || state.user.email.split('@')[0] || 'Cliente';
+      
+      await store.createOrder(state.user.uid, customerName, items, finalTotal, 'PIX', '', extrasSelected, null, false, null);
+      await store.updateCart(state.user.uid, {});
+      toast('Pedido realizado!', 'success');
+      navigate('account');
+    } catch (err) {
+      toast('Erro ao processar pedido.', 'error');
+      console.error(err);
+      btn.textContent = 'Pagar com PIX'; btn.disabled = false;
+    }
   };
 }
 
@@ -361,7 +368,6 @@ async function renderCheckout() {
 async function renderLibrary() {
   if (!state.user) return navigate('login');
   const orders = await store.getMyOrders(state.user.uid);
-  // Filtra itens comprados que não são pacotes
   const boughtItems = orders.filter(o => o.status === 'paid').flatMap(o => o.items);
   
   appEl().innerHTML = `<h2 class="section-title">Minha Biblioteca</h2>` +
@@ -408,7 +414,7 @@ async function renderAccount() {
       <div style="display:flex; gap:24px; flex-wrap:wrap;">
         <div style="flex:1; min-width:300px;">
           <h2 style="margin-bottom:16px;">Minha Conta</h2>
-          <div class="form-group"><label>Nome</label><input type="text" value="${p?.name || ''}" disabled /></div>
+          <div class="form-group"><label>Nome</label><input type="text" value="${p?.name || state.user.email.split('@')[0]}" disabled /></div>
           <div class="form-group"><label>E-mail</label><input type="text" value="${state.user.email}" disabled /></div>
           <div class="form-group"><label>Tipo</label><input type="text" value="${state.isAdmin ? 'Vendedor' : 'Cliente'}" disabled /></div>
           <button class="btn btn-outline mt-4" style="width:100%" onclick="window.navigate('library')">Ver Minha Biblioteca</button>
@@ -440,6 +446,7 @@ function renderRegister() {
     e.preventDefault(); 
     try { 
       const c = await createUserWithEmailAndPassword(auth, $('#email').value, $('#pass').value); 
+      // Salva o perfil. Se o Firestore bloquear, não irá travar o cadastro.
       await store.saveCustomerProfile(c.user, {name: $('#name').value}); 
       toast('Conta criada!', 'success'); navigate('home'); 
     } catch (err) { $('#msg').innerHTML = `<div class="alert alert-error">${err.message}</div>`; } 
@@ -450,7 +457,6 @@ function renderRegister() {
 async function renderAdmin(tab = 'dashboard') {
   if (!state.isAdmin) return navigate('login');
   
-  const totalEstoque = state.products.reduce((acc, p) => acc + (p.price * (p.stock || 0)), 0);
   const qtdProdutos = state.products.length;
   let content = '';
 
@@ -502,36 +508,29 @@ async function renderAdmin(tab = 'dashboard') {
     `;
   }
   else if (tab === 'orders') {
-    content = `<div style="text-align:center; padding: 40px;"><p class="muted">Buscando pedidos...</p></div>`;
-    appEl().innerHTML = `<div style="max-width:1200px; margin:0 auto; width:100%;"><div id="adminTabs"></div>${content}</div>`;
-    
-    try {
-      const list = await store.getAllOrders(); 
-      const rows = list.length ? list.map(o => {
-        let statusColor = o.status === 'paid' ? 'var(--success)' : o.status === 'canceled' ? 'var(--danger)' : o.status === 'shipped' ? 'var(--primary)' : 'var(--warning)';
-        return `
-        <tr>
-          <td><span style="font-family:monospace; font-size:0.8rem; color:var(--text-muted);">#${o.id.slice(0,6).toUpperCase()}</span></td>
-          <td>
-            <strong>${escapeHtml(o.customerName || 'Cliente')}</strong><br>
-            <span class="muted" style="font-size:0.75rem;">${o.items.length} item(s) | CPF: ${escapeHtml(o.cpf || 'N/I')}</span>
-          </td>
-          <td style="font-weight:700; color:var(--success);">${brl(o.total)}</td>
-          <td>
-            <select data-order-status="${o.id}" style="padding:6px; border-radius:6px; background:var(--bg-elev); color:${statusColor}; border:1px solid ${statusColor}; font-weight:bold;">
-              <option value="pending" ${o.status === 'pending' ? 'selected' : ''}>⏳ Pendente</option>
-              <option value="paid" ${o.status === 'paid' ? 'selected' : ''}>✅ Pago</option>
-              <option value="shipped" ${o.status === 'shipped' ? 'selected' : ''}>📦 Enviado</option>
-              <option value="canceled" ${o.status === 'canceled' ? 'selected' : ''}>❌ Cancelado</option>
-            </select>
-          </td>
-        </tr>`;
-      }).join('') : `<tr><td colspan="4" class="muted" style="text-align:center;padding:32px;">Nenhum pedido encontrado.</td></tr>`;
+    const list = await store.getAllOrders(); 
+    const rows = list.length ? list.map(o => {
+      let statusColor = o.status === 'paid' ? 'var(--success)' : o.status === 'canceled' ? 'var(--danger)' : o.status === 'shipped' ? 'var(--primary)' : 'var(--warning)';
+      return `
+      <tr>
+        <td><span style="font-family:monospace; font-size:0.8rem; color:var(--text-muted);">#${o.id.slice(0,6).toUpperCase()}</span></td>
+        <td>
+          <strong>${escapeHtml(o.customerName || 'Cliente')}</strong><br>
+          <span class="muted" style="font-size:0.75rem;">${o.items.length} item(s) | CPF: ${escapeHtml(o.cpf || 'N/I')}</span>
+        </td>
+        <td style="font-weight:700; color:var(--success);">${brl(o.total)}</td>
+        <td>
+          <select data-order-status="${o.id}" style="padding:6px; border-radius:6px; background:var(--bg-elev); color:${statusColor}; border:1px solid ${statusColor}; font-weight:bold;">
+            <option value="pending" ${o.status === 'pending' ? 'selected' : ''}>⏳ Pendente</option>
+            <option value="paid" ${o.status === 'paid' ? 'selected' : ''}>✅ Pago</option>
+            <option value="shipped" ${o.status === 'shipped' ? 'selected' : ''}>📦 Enviado</option>
+            <option value="canceled" ${o.status === 'canceled' ? 'selected' : ''}>❌ Cancelado</option>
+          </select>
+        </td>
+      </tr>`;
+    }).join('') : `<tr><td colspan="4" class="muted" style="text-align:center;padding:32px;">Nenhum pedido encontrado.</td></tr>`;
 
-      content = `<h3 class="mb-4">Gerenciamento de Pedidos</h3><div class="table-wrap"><table class="data-table"><thead><tr><th>ID</th><th>Cliente / CPF</th><th>Total</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></div>`;
-    } catch (err) {
-      content = `<div class="alert alert-error">Erro ao buscar pedidos.</div>`;
-    }
+    content = `<h3 class="mb-4">Gerenciamento de Pedidos</h3><div class="table-wrap"><table class="data-table"><thead><tr><th>ID</th><th>Cliente / CPF</th><th>Total</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   }
   else if (tab === 'settings' && state.isAdmin) {
     content = `
@@ -604,12 +603,7 @@ async function renderAdmin(tab = 'dashboard') {
     </div>
   `;
 
-  if (tab === 'orders') {
-    appEl().querySelector('#adminTabs').innerHTML = tabsHtml;
-    appEl().querySelector('#adminTabs').parentElement.innerHTML += content;
-  } else {
-    appEl().innerHTML = `<div style="max-width:1200px; margin:0 auto; width:100%;">${tabsHtml}${content}</div>`;
-  }
+  appEl().innerHTML = `<div style="max-width:1200px; margin:0 auto; width:100%;">${tabsHtml}${content}</div>`;
 
   // Event Listeners
   appEl().querySelectorAll('[data-nav]').forEach((el) => el.addEventListener('click', () => navigate(el.getAttribute('data-nav'))));
@@ -711,8 +705,14 @@ function renderProductForm(id) {
 
   $('#productForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const btn = $('#btnSubmit'); btn.textContent = 'Salvando...'; btn.disabled = true;
-    const expiresVal = $('#pExpires').value ? new Date($('#pExpires').value).getTime() : 0;
+    const btn = $('#btnSubmit'); 
+    btn.textContent = 'Salvando...'; 
+    btn.disabled = true;
+    
+    let expiresVal = 0;
+    if ($('#pExpires').value) {
+      expiresVal = new Date($('#pExpires').value).getTime();
+    }
     
     const data = { 
       name: $('#pName').value.trim(), 
@@ -726,10 +726,21 @@ function renderProductForm(id) {
       description: $('#pDesc').value.trim(), 
       image: base64Image 
     };
+    
     try {
-      if (ed) await store.updateProduct(ed.id, data); else await store.addProduct(data);
-      toast('Salvo!', 'success'); navigate('admin', {tab:'products'});
-    } catch (err) { toast('Erro ao salvar.', 'error'); console.error(err); btn.disabled = false; btn.textContent = 'Salvar Produto'; }
+      if (ed) {
+        await store.updateProduct(ed.id, data); 
+      } else {
+        await store.addProduct(data);
+      }
+      toast('Produto salvo com sucesso!', 'success'); 
+      navigate('admin', {tab:'products'});
+    } catch (err) { 
+      toast('Erro ao salvar. Verifique sua conexão.', 'error'); 
+      console.error(err); 
+      btn.disabled = false; 
+      btn.textContent = 'Salvar Produto'; 
+    }
   });
 }
 
