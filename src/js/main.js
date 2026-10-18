@@ -2,27 +2,36 @@
    main.js — SPA Core Gbzin Shop
    ===================================================================== */
 import { auth } from './firebase-config.js';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import { 
+  createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword, 
+  signOut, 
+  onAuthStateChanged 
+} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import { store } from './store.js';
 import { $, appEl, headerEl, brl, escapeHtml, toast, icons, maskCPF, formatDate } from './utils.js';
 import { renderAdmin } from './admin.js';
 import { renderSupport } from './support.js';
 
+// LISTA DE ADMINS (Você e todos os e-mails enviados)
 const ADMINS = [
-  "gabrielcordeirosilva2010@gmail.com", "10pedrin0@gmail.com",
-  "lucaslyra875@gmail.com", "gbzinstudio@gmail.com", "Voabernas@gmail.com"
+  "gabrielcordeirosilva2010@gmail.com",
+  "10pedrin0@gmail.com",
+  "lucaslyra875@gmail.com",
+  "gbzinstudio@gmail.com",
+  "Voabernas@gmail.com"
 ];
 
 const state = {
   route: 'home', params: {}, user: null, isAdmin: false, isOwner: false,
   products: [], cart: {}, favorites: {}, settings: { storeName: 'Gbzin Shop' },
-  maintenance: false, profileTab: 'data',
+  maintenance: false, profileTab: 'data', // Aba padrão do perfil
   unsubCart: null, unsubProducts: null, unsubSettings: null, unsubFavs: null, unsubMaintenance: null
 };
 
 /* ------------------------------ HEADER -------------------------------- */
 function renderHeader() {
-  if (state.maintenance && !state.isAdmin) return;
+  if (state.maintenance && !state.isAdmin) return; // Se estiver em manutenção e não for admin, não mostra header normal
 
   let account = '';
   if (state.user) {
@@ -53,6 +62,7 @@ function renderHeader() {
 function navigate(route, params = {}) {
   state.route = route; state.params = { ...state.params, ...params };
   
+  // Bloqueio de Manutenção
   if (state.maintenance && !state.isAdmin && route !== 'login' && route !== 'maintenance') {
      return renderMaintenance();
   }
