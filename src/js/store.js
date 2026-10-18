@@ -34,7 +34,7 @@ export const store = {
       expiresAt: Number(data.expiresAt) || 0,
       description: data.description || '',
       image: data.image || '',
-      active: true,
+      active: data.active !== undefined ? data.active : true, // Suporta criação como Rascunho
       salesCount: 0,
       createdAt: Date.now()
     });
@@ -52,7 +52,8 @@ export const store = {
       isLimited: Boolean(data.isLimited),
       expiresAt: Number(data.expiresAt),
       description: data.description,
-      image: data.image
+      image: data.image,
+      active: data.active
     });
   },
 
@@ -85,7 +86,7 @@ export const store = {
     else await set(refFav, true);
   },
 
-  /* ================= CUPONS, CONFIGURAÇÕES E MANUTENÇÃO ================= */
+  /* ================= CONFIGURAÇÕES, MANUTENÇÃO E CUPONS ================= */
   listenSettings(callback) {
     return onValue(ref(db, 'settings'), (snapshot) => callback(snapshot.val() || {}));
   },
@@ -126,18 +127,9 @@ export const store = {
   async createOrder(userId, customerName, items, total, paymentMethod, cpf, extras, coupon, isGift, giftTo) {
     const orderRef = doc(collection(firestore, 'orders'));
     const orderData = {
-      userId, 
-      customerName: customerName || 'Cliente', 
-      items, 
-      total, 
-      paymentMethod: paymentMethod || 'PIX',
-      cpf: cpf || 'Não informado', 
-      extras: extras || [], 
-      coupon: coupon || null, 
-      isGift: isGift || false, 
-      giftTo: giftTo || null,
-      status: 'pending', 
-      createdAt: serverTimestamp()
+      userId, customerName: customerName || 'Cliente', items, total, paymentMethod: paymentMethod || 'PIX',
+      cpf: cpf || 'Não informado', extras: extras || [], coupon: coupon || null, isGift: isGift || false, giftTo: giftTo || null,
+      status: 'pending', createdAt: serverTimestamp()
     };
     await setDoc(orderRef, orderData);
 
@@ -146,10 +138,7 @@ export const store = {
       const snap = await get(pRef);
       if (snap.exists()) {
         const p = snap.val();
-        await update(pRef, { 
-          stock: Math.max(0, (p.stock || 0) - item.qty), 
-          salesCount: (p.salesCount || 0) + item.qty 
-        });
+        await update(pRef, { stock: Math.max(0, (p.stock || 0) - item.qty), salesCount: (p.salesCount || 0) + item.qty });
       }
     }
     return orderRef.id;
@@ -160,16 +149,14 @@ export const store = {
     try {
       const q = fsQuery(collection(firestore, 'orders'), where('userId', '==', userId));
       const snap = await getDocs(q);
-      return snap.docs.map(d => ({ id: d.id, ...d.data() }))
-        .sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0));
+      return snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0));
     } catch { return []; }
   },
 
   async getAllOrders() {
     try {
       const snap = await getDocs(collection(firestore, 'orders'));
-      return snap.docs.map(d => ({ id: d.id, ...d.data() }))
-        .sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0));
+      return snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0));
     } catch { return []; }
   },
 
@@ -179,35 +166,24 @@ export const store = {
 
   async addReview(productId, userId, userName, rating, comment) {
     const reviewRef = doc(collection(firestore, 'reviews', productId, 'items'));
-    await setDoc(reviewRef, { 
-      userId, 
-      userName, 
-      rating: Number(rating), 
-      comment, 
-      createdAt: serverTimestamp() 
-    });
+    await setDoc(reviewRef, { userId, userName, rating: Number(rating), comment, createdAt: serverTimestamp() });
   },
 
   async getReviews(productId) {
     try {
       const snap = await getDocs(collection(firestore, 'reviews', productId, 'items'));
-      return snap.docs.map(d => ({ id: d.id, ...d.data() }))
-        .sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0));
+      return snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0));
     } catch { return []; }
   },
 
-  /* ================= CLIENTES E VENDEDORES ================= */
+  /* ================= CLIENTES ================= */
   async saveCustomerProfile(user, extra = {}) {
     if (!user) return;
     try {
       const userRef = doc(firestore, 'customers', user.uid);
       const snap = await getDoc(userRef);
       if (!snap.exists()) {
-        await setDoc(userRef, { 
-          email: user.email || '', 
-          name: extra.name || user.displayName || 'Cliente', 
-          createdAt: serverTimestamp() 
-        });
+        await setDoc(userRef, { email: user.email || '', name: extra.name || user.displayName || 'Cliente', createdAt: serverTimestamp() });
       }
     } catch (e) { console.warn(e); }
   },
@@ -218,23 +194,5 @@ export const store = {
       const snap = await getDoc(doc(firestore, 'customers', userId));
       return snap.exists() ? snap.data() : null;
     } catch { return null; }
-  },
-
-  listenVendedores(callback) {
-    return onValue(ref(db, 'vendedores'), (snapshot) => callback(snapshot.val() || {}));
-  },
-
-  async addVendedor(email, nome) {
-    const safeEmail = email.replace(/\./g, ',');
-    await set(ref(db, `vendedores/${safeEmail}`), { 
-      email, 
-      nome, 
-      addedAt: Date.now() 
-    });
-  },
-
-  async removeVendedor(email) {
-    const safeEmail = email.replace(/\./g, ',');
-    await remove(ref(db, `vendedores/${safeEmail}`));
   }
 };
