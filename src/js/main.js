@@ -1,29 +1,16 @@
-/* =====================================================================
-   main.js — SPA Core Gbzin Shop
-   ===================================================================== */
 import { auth } from './firebase-config.js';
-import { 
-  createUserWithEmailAndPassword, 
-  signInWithEmailAndPassword, 
-  signOut, 
-  onAuthStateChanged 
-} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import { store } from './store.js';
-import { $, appEl, headerEl, brl, escapeHtml, toast, formatDate } from './utils.js';
+import { $, appEl, headerEl, brl, escapeHtml, toast } from './utils.js';
 
-// Importação dos módulos
 import { renderAdmin } from './admin.js';
 import { renderSupport } from './support.js';
 import { renderProductForm } from './productForm.js';
 import { renderAccount } from './account.js';
 
-// LISTA DE ADMINS
 const ADMINS = [
-  "gabrielcordeirosilva2010@gmail.com",
-  "10pedrin0@gmail.com",
-  "lucaslyra875@gmail.com",
-  "gbzinstudio@gmail.com",
-  "Voabernas@gmail.com"
+  "gabrielcordeirosilva2010@gmail.com", "10pedrin0@gmail.com",
+  "lucaslyra875@gmail.com", "gbzinstudio@gmail.com", "Voabernas@gmail.com"
 ];
 
 const state = {
@@ -35,13 +22,13 @@ const state = {
 
 /* ------------------------------ HEADER -------------------------------- */
 function renderHeader() {
-  if (state.maintenance && !state.isAdmin) return; // Esconde header em manutenção para clientes
+  if (state.maintenance && !state.isAdmin) return;
 
   let account = '';
   if (state.user) {
     if (state.isAdmin) account += `<button class="btn btn-outline" onclick="window.navigate('admin')">🛠️ <span class="label">Painel</span></button>`;
     account += `<button class="btn btn-outline" onclick="window.navigate('account')">👤 <span class="label">Conta</span></button>`;
-    account += `<button class="btn btn-outline" id="logoutBtn">🚪 <span class="label">Sair</span></button>`;
+    account += `<button class="btn btn-outline" onclick="window.signOutUser()">🚪 <span class="label">Sair</span></button>`;
   } else {
     account = `<button class="btn btn-outline" onclick="window.navigate('login')">👤 <span class="label">Entrar</span></button>`;
   }
@@ -58,8 +45,6 @@ function renderHeader() {
         ${account}
       </div>
     </div>`;
-  
-  $('#logoutBtn')?.addEventListener('click', async () => { await signOut(auth); toast('Sessão encerrada.', 'success'); });
 }
 
 /* ------------------------------ NAVEGAÇÃO ----------------------------- */
@@ -75,8 +60,8 @@ function navigate(route, params = {}) {
     case 'home': return renderHome();
     case 'login': return renderLogin();
     case 'register': return renderRegister();
-    case 'account': return renderAccount(state); // Chama o account.js
-    case 'favorites': return renderFavorites();
+    case 'account': return renderAccount(state);
+    case 'favorites': state.profileTab = 'favorites'; return renderAccount(state);
     case 'support': return renderSupport();
     case 'admin': return renderAdmin(state, params.tab || 'dashboard');
     case 'product-form': return renderProductForm(state, params.id);
@@ -89,23 +74,41 @@ function navigate(route, params = {}) {
 }
 window.navigate = navigate;
 
-/* ------------------------------ MANUTENÇÃO --------------------------- */
+/* ------------------------------ AÇÕES GLOBAIS ------------------------ */
+window.signOutUser = async () => { await signOut(auth); toast('Saiu.', 'success'); };
+
+// Escuta o evento que o account.js dispara ao clicar nas abas
+document.addEventListener('setProfileTab', (e) => {
+  state.profileTab = e.detail;
+  renderAccount(state);
+});
+
+window.toggleFav = async (pid, isFav) => {
+  if (!state.user) return toast('Faça login.', 'error');
+  await store.toggleFavorite(state.user.uid, pid, isFav);
+};
+
+window.addCart = async (pid) => {
+  if (!state.user) return navigate('login');
+  const itemRef = state.cart[pid];
+  await store.updateCart(state.user.uid, { ...state.cart, [pid]: { qty: (itemRef?.qty || 0) + 1 } });
+  toast('Adicionado!', 'success');
+};
+
+window.updateCartQty = async (pid, qty) => {
+  const newCart = { ...state.cart };
+  if (qty <= 0) delete newCart[pid]; else newCart[pid] = { qty };
+  await store.updateCart(state.user.uid, newCart);
+};
+
+/* ------------------------------ TELAS BÁSICAS ------------------------- */
 function renderMaintenance() {
   headerEl().innerHTML = '';
-  appEl().innerHTML = `
-    <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:70vh; text-align:center;">
-      <div style="font-size:4rem; margin-bottom:20px;">🚧</div>
-      <h1 style="font-size:2rem; margin-bottom:12px;">Estamos em Manutenção</h1>
-      <p class="muted" style="max-width:400px; margin-bottom:24px;">Estamos melhorando a loja para você. Voltamos em breve! Se você é administrador, faça login abaixo.</p>
-      <button class="btn btn-primary" onclick="window.navigate('login')">Fazer Login</button>
-    </div>
-  `;
+  appEl().innerHTML = `<div style="text-align:center; padding:80px 20px;"><h1>🚧 Manutenção</h1><p class="muted">Voltamos em breve.</p><button class="btn btn-primary mt-4" onclick="window.navigate('login')">Fazer Login</button></div>`;
 }
 
-/* ------------------------------ HOME ---------------------------------- */
 function renderHome() {
   const list = state.products.filter(p => p.active !== false);
-  
   const renderCard = (p, isFav) => `
     <div class="product-card">
       <div class="thumb" onclick="window.navigate('product-details', {id: '${p.id}'})" style="cursor:pointer">
@@ -131,85 +134,30 @@ function renderHome() {
   `;
 }
 
-window.toggleFav = async (pid, isFav) => {
-  if (!state.user) return toast('Faça login.', 'error');
-  await store.toggleFavorite(state.user.uid, pid, isFav);
-};
-
-window.addCart = async (pid) => {
-  if (!state.user) return navigate('login');
-  const itemRef = state.cart[pid];
-  await store.updateCart(state.user.uid, { ...state.cart, [pid]: { qty: (itemRef?.qty || 0) + 1 } });
-  toast('Adicionado!', 'success');
-};
-
-/* -------------------------- PRODUTO DETALHES -------------------------- */
-async function renderProductDetails(id) {
+function renderProductDetails(id) {
   const p = state.products.find(x => x.id === id);
   if (!p) return navigate('home');
-  appEl().innerHTML = `
-    <div class="card wide" style="max-width:900px; display:flex; gap:32px; flex-wrap:wrap;">
-      <div style="flex:1; min-width:300px;"><img src="${p.image}" style="width:100%; border-radius:12px;" /></div>
-      <div style="flex:1; min-width:300px;">
-        <h2>${escapeHtml(p.name)}</h2>
-        <p class="muted mb-4">${escapeHtml(p.category)} • ${escapeHtml(p.rarity)}</p>
-        <div style="font-size:2rem; color:var(--primary); font-weight:800; margin-bottom:16px;">${brl(p.promoPrice || p.price)}</div>
-        <p class="mb-4">${escapeHtml(p.description)}</p>
-        <button class="btn btn-primary" onclick="window.addCart('${p.id}')" style="width:100%; padding:16px;">Adicionar ao Carrinho</button>
-      </div>
-    </div>
-  `;
+  appEl().innerHTML = `<div class="card wide" style="max-width:900px; display:flex; gap:32px; flex-wrap:wrap;"><div style="flex:1;"><img src="${p.image}" style="width:100%; border-radius:12px;"></div><div style="flex:1;"><h2>${p.name}</h2><p class="muted">${p.category}</p><h3 style="color:var(--primary);">${brl(p.promoPrice || p.price)}</h3><p>${p.description}</p><button class="btn btn-primary" onclick="window.addCart('${p.id}')" style="width:100%; padding:16px;">Comprar</button></div></div>`;
 }
 
-/* ------------------------------ FAVORITOS ----------------------------- */
-function renderFavorites() {
-  if (!state.user) return navigate('login');
-  state.profileTab = 'favorites';
-  renderAccount(state);
-}
-
-/* ------------------------------ LOGIN / REGISTRO ---------------------- */
 function renderLogin() {
   appEl().innerHTML = `<div class="card"><h2>Entrar</h2><form id="form"><div class="form-group"><label>E-mail</label><input type="email" id="email" required></div><div class="form-group"><label>Senha</label><input type="password" id="pass" required></div><button class="btn btn-primary" style="width:100%">Entrar</button></form><p class="muted mt-4" style="text-align:center"><a href="#" onclick="window.navigate('register')">Cadastre-se</a></p></div>`;
-  $('#form').onsubmit = async (e) => { 
-    e.preventDefault(); 
-    try { await signInWithEmailAndPassword(auth, $('#email').value, $('#pass').value); } 
-    catch (err) { toast(err.message, 'error'); } 
-  };
+  $('#form').onsubmit = async (e) => { e.preventDefault(); try { await signInWithEmailAndPassword(auth, $('#email').value, $('#pass').value); } catch (err) { toast(err.message, 'error'); } };
 }
 
 function renderRegister() {
   appEl().innerHTML = `<div class="card"><h2>Criar conta</h2><form id="form"><div class="form-group"><label>Nome</label><input type="text" id="name" required></div><div class="form-group"><label>E-mail</label><input type="email" id="email" required></div><div class="form-group"><label>Senha</label><input type="password" id="pass" required minlength="6"></div><button class="btn btn-primary" style="width:100%">Cadastrar</button></form></div>`;
-  $('#form').onsubmit = async (e) => { 
-    e.preventDefault(); 
-    try { 
-      const c = await createUserWithEmailAndPassword(auth, $('#email').value, $('#pass').value); 
-      await store.saveCustomerProfile(c.user, {name: $('#name').value}); 
-      toast('Conta criada!', 'success'); navigate('home'); 
-    } catch (err) { toast(err.message, 'error'); } 
-  };
+  $('#form').onsubmit = async (e) => { e.preventDefault(); try { const c = await createUserWithEmailAndPassword(auth, $('#email').value, $('#pass').value); await store.saveCustomerProfile(c.user, {name: $('#name').value}); toast('Conta criada!', 'success'); navigate('home'); } catch (err) { toast(err.message, 'error'); } };
 }
 
-/* ------------------------------ CARRINHO E CHECKOUT ------------------- */
 function renderCart() {
   if (!state.user) return navigate('login');
   const items = Object.entries(state.cart);
   if (!items.length) return appEl().innerHTML = `<div class="empty-state"><h3>Carrinho vazio</h3></div>`;
   let total = 0;
-  const html = items.map(([pid, i]) => {
-    const p = state.products.find(x => x.id === pid);
-    if (!p) return '';
-    total += (p.promoPrice || p.price) * i.qty;
-    return `<div class="cart-item"><div class="info"><div class="name">${p.name}</div><div class="price">${brl(p.promoPrice || p.price)}</div></div><div class="qty"><button onclick="window.updateCartQty('${pid}', ${i.qty - 1})">-</button><span>${i.qty}</span><button onclick="window.updateCartQty('${pid}', ${i.qty + 1})">+</button></div></div>`;
-  }).join('');
+  const html = items.map(([pid, i]) => { const p = state.products.find(x => x.id === pid); if (!p) return ''; total += (p.promoPrice || p.price) * i.qty; return `<div class="cart-item"><div class="info"><div class="name">${p.name}</div><div class="price">${brl(p.promoPrice || p.price)}</div></div><div class="qty"><button onclick="window.updateCartQty('${pid}', ${i.qty - 1})">-</button><span>${i.qty}</span><button onclick="window.updateCartQty('${pid}', ${i.qty + 1})">+</button></div></div>`; }).join('');
   appEl().innerHTML = `<h2 class="section-title">Carrinho</h2><div class="cart-list">${html}</div><div class="cart-summary mt-4"><div class="total">${brl(total)}</div><button class="btn btn-primary" onclick="window.navigate('checkout')">Checkout</button></div>`;
 }
-
-window.updateCartQty = async (pid, qty) => {
-  const newCart = { ...state.cart };
-  if (qty <= 0) delete newCart[pid]; else newCart[pid] = { qty };
-  await store.updateCart(state.user.uid, newCart);
-};
 
 async function renderCheckout() {
   if (!state.user) return navigate('login');
@@ -230,14 +178,11 @@ state.unsubMaintenance = store.listenMaintenance((m) => {
   if (m && !state.isAdmin) renderMaintenance();
   else if (!m && state.route === 'maintenance') navigate('home');
 });
-
-// Escuta os cupons para a aba de cupons do cliente e do admin
 store.listenCoupons((c) => { state.coupons = c; });
 
 onAuthStateChanged(auth, async (user) => {
   state.user = user;
   if (user) {
-    window.currentUserUid = user.uid; // Salva globalmente para o account.js
     state.isOwner = ADMINS.includes(user.email);
     state.isAdmin = ADMINS.includes(user.email);
     
@@ -249,7 +194,6 @@ onAuthStateChanged(auth, async (user) => {
     
     await store.saveCustomerProfile(user);
   } else {
-    window.currentUserUid = null;
     state.isAdmin = false; state.cart = {}; state.favorites = {};
     if (state.unsubCart) state.unsubCart();
     if (state.unsubFavs) state.unsubFavs();
