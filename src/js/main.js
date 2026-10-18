@@ -8,10 +8,7 @@ import { renderSupport } from './support.js';
 import { renderProductForm } from './productForm.js';
 import { renderAccount } from './account.js';
 
-const ADMINS = [
-  "gabrielcordeirosilva2010@gmail.com", "10pedrin0@gmail.com",
-  "lucaslyra875@gmail.com", "gbzinstudio@gmail.com", "Voabernas@gmail.com"
-];
+const ADMINS = ["gabrielcordeirosilva2010@gmail.com", "10pedrin0@gmail.com", "lucaslyra875@gmail.com", "gbzinstudio@gmail.com", "Voabernas@gmail.com"];
 
 const state = {
   route: 'home', params: {}, user: null, isAdmin: false, isOwner: false,
@@ -20,10 +17,8 @@ const state = {
   unsubCart: null, unsubProducts: null, unsubSettings: null, unsubFavs: null, unsubMaintenance: null
 };
 
-/* ------------------------------ HEADER -------------------------------- */
 function renderHeader() {
   if (state.maintenance && !state.isAdmin) return;
-
   let account = '';
   if (state.user) {
     if (state.isAdmin) account += `<button class="btn btn-outline" onclick="window.navigate('admin')">🛠️ <span class="label">Painel</span></button>`;
@@ -32,29 +27,22 @@ function renderHeader() {
   } else {
     account = `<button class="btn btn-outline" onclick="window.navigate('login')">👤 <span class="label">Entrar</span></button>`;
   }
-
   const count = Object.values(state.cart).reduce((s, i) => s + (i.qty || 0), 0);
-
   headerEl().innerHTML = `
     <div class="header-inner">
       <div class="logo" onclick="window.navigate('home')">${escapeHtml(state.settings.storeName)}</div>
       <div class="header-actions">
-        <button class="btn btn-icon btn-outline" onclick="window.navigate('support')" title="Suporte">🎧</button>
-        <button class="btn btn-icon btn-outline" onclick="window.navigate('favorites')" title="Favoritos">❤️</button>
-        <button class="btn btn-icon btn-outline" onclick="window.navigate('cart')" title="Carrinho">🛒${count > 0 ? `<span class="badge">${count}</span>` : ''}</button>
+        <button class="btn btn-outline btn-icon" onclick="window.navigate('support')" title="Suporte">🎧</button>
+        <button class="btn btn-outline btn-icon" onclick="window.navigate('favorites')" title="Favoritos">❤️</button>
+        <button class="btn btn-outline btn-icon" onclick="window.navigate('cart')" title="Carrinho">🛒${count > 0 ? `<span class="badge">${count}</span>` : ''}</button>
         ${account}
       </div>
     </div>`;
 }
 
-/* ------------------------------ NAVEGAÇÃO ----------------------------- */
 function navigate(route, params = {}) {
   state.route = route; state.params = { ...state.params, ...params };
-  
-  if (state.maintenance && !state.isAdmin && route !== 'login' && route !== 'maintenance') {
-     return renderMaintenance();
-  }
-
+  if (state.maintenance && !state.isAdmin && route !== 'login' && route !== 'maintenance') return renderMaintenance();
   renderHeader();
   switch (route) {
     case 'home': return renderHome();
@@ -74,96 +62,68 @@ function navigate(route, params = {}) {
 }
 window.navigate = navigate;
 
-/* ------------------------------ AÇÕES GLOBAIS ------------------------ */
 window.signOutUser = async () => { await signOut(auth); toast('Saiu.', 'success'); };
+document.addEventListener('setProfileTab', (e) => { state.profileTab = e.detail; renderAccount(state); });
+window.toggleFav = async (pid, isFav) => { if (!state.user) return toast('Faça login.', 'error'); await store.toggleFavorite(state.user.uid, pid, isFav); };
+window.addCart = async (pid) => { if (!state.user) return navigate('login'); const i = state.cart[pid]; await store.updateCart(state.user.uid, { ...state.cart, [pid]: { qty: (i?.qty || 0) + 1 } }); toast('Adicionado!', 'success'); };
+window.updateCartQty = async (pid, qty) => { const c = { ...state.cart }; if (qty <= 0) delete c[pid]; else c[pid] = { qty }; await store.updateCart(state.user.uid, c); };
 
-// Escuta o evento que o account.js dispara ao clicar nas abas
-document.addEventListener('setProfileTab', (e) => {
-  state.profileTab = e.detail;
-  renderAccount(state);
-});
-
-window.toggleFav = async (pid, isFav) => {
-  if (!state.user) return toast('Faça login.', 'error');
-  await store.toggleFavorite(state.user.uid, pid, isFav);
-};
-
-window.addCart = async (pid) => {
-  if (!state.user) return navigate('login');
-  const itemRef = state.cart[pid];
-  await store.updateCart(state.user.uid, { ...state.cart, [pid]: { qty: (itemRef?.qty || 0) + 1 } });
-  toast('Adicionado!', 'success');
-};
-
-window.updateCartQty = async (pid, qty) => {
-  const newCart = { ...state.cart };
-  if (qty <= 0) delete newCart[pid]; else newCart[pid] = { qty };
-  await store.updateCart(state.user.uid, newCart);
-};
-
-/* ------------------------------ TELAS BÁSICAS ------------------------- */
 function renderMaintenance() {
   headerEl().innerHTML = '';
-  appEl().innerHTML = `<div style="text-align:center; padding:80px 20px;"><h1>🚧 Manutenção</h1><p class="muted">Voltamos em breve.</p><button class="btn btn-primary mt-4" onclick="window.navigate('login')">Fazer Login</button></div>`;
+  appEl().innerHTML = `<div class="empty-state" style="height: 70vh;"><h1 style="font-size: 3rem; margin-bottom: 16px;">🚧</h1><h2>Estamos em Manutenção</h2><p>Voltamos em breve.</p><button class="btn btn-primary mt-6" onclick="window.navigate('login')">Fazer Login</button></div>`;
 }
 
 function renderHome() {
   const list = state.products.filter(p => p.active !== false);
-  const renderCard = (p, isFav) => `
+  const card = (p, isFav) => `
     <div class="product-card">
-      <div class="thumb" onclick="window.navigate('product-details', {id: '${p.id}'})" style="cursor:pointer">
+      <div class="thumb" onclick="window.navigate('product-details', {id: '${p.id}'})">
         ${p.image ? `<img src="${p.image}" />` : `<div class="placeholder">🛍️</div>`}
       </div>
       <button class="fav-btn" onclick="window.toggleFav('${p.id}', ${isFav})">${isFav ? '❤️' : '🤍'}</button>
       <div class="info">
-        <div class="category">${escapeHtml(p.category || 'Geral')} • ${escapeHtml(p.rarity || 'Comum')}</div>
+        <div class="category">${escapeHtml(p.category || 'Geral')}</div>
         <div class="name">${escapeHtml(p.name)}</div>
-        <div class="price">${p.promoPrice > 0 ? `<span style="text-decoration:line-through; font-size:0.8rem; color:#888;">${brl(p.price)}</span> ${brl(p.promoPrice)}` : brl(p.price)}</div>
+        <div class="price">${p.promoPrice > 0 ? `${brl(p.promoPrice)}` : brl(p.price)}</div>
       </div>
       <div class="actions"><button class="btn btn-primary" onclick="window.addCart('${p.id}')" ${p.stock <= 0 ? 'disabled' : ''}>${p.stock <= 0 ? 'Esgotado' : 'Comprar'}</button></div>
     </div>`;
 
-  const bestSellers = [...list].sort((a, b) => (b.salesCount || 0) - (a.salesCount || 0)).slice(0, 4);
+  const best = [...list].sort((a, b) => (b.salesCount || 0) - (a.salesCount || 0)).slice(0, 4);
   const news = list.slice(0, 4);
-
-  appEl().innerHTML = `
-    <h2 class="section-title">🔥 Mais Vendidas</h2>
-    <div class="product-grid">${bestSellers.map(p => renderCard(p, state.favorites[p.id])).join('')}</div>
-    <h2 class="section-title" style="margin-top:40px">✨ Novidades</h2>
-    <div class="product-grid">${news.map(p => renderCard(p, state.favorites[p.id])).join('')}</div>
-  `;
+  appEl().innerHTML = `<h2 class="section-title">🔥 Mais Vendidas</h2><div class="product-grid">${best.map(p => card(p, state.favorites[p.id])).join('')}</div><h2 class="section-title mt-8">✨ Novidades</h2><div class="product-grid">${news.map(p => card(p, state.favorites[p.id])).join('')}</div>`;
 }
 
 function renderProductDetails(id) {
   const p = state.products.find(x => x.id === id);
   if (!p) return navigate('home');
-  appEl().innerHTML = `<div class="card wide" style="max-width:900px; display:flex; gap:32px; flex-wrap:wrap;"><div style="flex:1;"><img src="${p.image}" style="width:100%; border-radius:12px;"></div><div style="flex:1;"><h2>${p.name}</h2><p class="muted">${p.category}</p><h3 style="color:var(--primary);">${brl(p.promoPrice || p.price)}</h3><p>${p.description}</p><button class="btn btn-primary" onclick="window.addCart('${p.id}')" style="width:100%; padding:16px;">Comprar</button></div></div>`;
+  appEl().innerHTML = `<div class="card flex gap-6 flex-wrap" style="max-width: 900px; margin: 0 auto;"><div style="flex:1;"><img src="${p.image}" style="border-radius: 8px;"></div><div style="flex:1;"><h2>${p.name}</h2><p class="muted mt-2">${p.category}</p><h3 class="mt-4" style="color: var(--primary);">${brl(p.promoPrice || p.price)}</h3><p class="mt-4">${p.description}</p><button class="btn btn-primary mt-6" onclick="window.addCart('${p.id}')" style="width: 100%;">Adicionar ao Carrinho</button></div></div>`;
 }
 
 function renderLogin() {
-  appEl().innerHTML = `<div class="card"><h2>Entrar</h2><form id="form"><div class="form-group"><label>E-mail</label><input type="email" id="email" required></div><div class="form-group"><label>Senha</label><input type="password" id="pass" required></div><button class="btn btn-primary" style="width:100%">Entrar</button></form><p class="muted mt-4" style="text-align:center"><a href="#" onclick="window.navigate('register')">Cadastre-se</a></p></div>`;
+  appEl().innerHTML = `<div class="card card-wide" style="max-width: 400px;"><h2 class="text-center mb-6">Entrar</h2><form id="form"><div class="form-group"><label>E-mail</label><input type="email" id="email" required></div><div class="form-group"><label>Senha</label><input type="password" id="pass" required></div><button class="btn btn-primary mt-4" style="width:100%">Entrar</button></form><p class="muted text-center mt-4"><a href="#" onclick="window.navigate('register')">Cadastre-se</a></p></div>`;
   $('#form').onsubmit = async (e) => { e.preventDefault(); try { await signInWithEmailAndPassword(auth, $('#email').value, $('#pass').value); } catch (err) { toast(err.message, 'error'); } };
 }
 
 function renderRegister() {
-  appEl().innerHTML = `<div class="card"><h2>Criar conta</h2><form id="form"><div class="form-group"><label>Nome</label><input type="text" id="name" required></div><div class="form-group"><label>E-mail</label><input type="email" id="email" required></div><div class="form-group"><label>Senha</label><input type="password" id="pass" required minlength="6"></div><button class="btn btn-primary" style="width:100%">Cadastrar</button></form></div>`;
+  appEl().innerHTML = `<div class="card card-wide" style="max-width: 400px;"><h2 class="text-center mb-6">Criar Conta</h2><form id="form"><div class="form-group"><label>Nome</label><input type="text" id="name" required></div><div class="form-group"><label>E-mail</label><input type="email" id="email" required></div><div class="form-group"><label>Senha</label><input type="password" id="pass" required minlength="6"></div><button class="btn btn-primary mt-4" style="width:100%">Cadastrar</button></form></div>`;
   $('#form').onsubmit = async (e) => { e.preventDefault(); try { const c = await createUserWithEmailAndPassword(auth, $('#email').value, $('#pass').value); await store.saveCustomerProfile(c.user, {name: $('#name').value}); toast('Conta criada!', 'success'); navigate('home'); } catch (err) { toast(err.message, 'error'); } };
 }
 
 function renderCart() {
   if (!state.user) return navigate('login');
   const items = Object.entries(state.cart);
-  if (!items.length) return appEl().innerHTML = `<div class="empty-state"><h3>Carrinho vazio</h3></div>`;
+  if (!items.length) return appEl().innerHTML = `<div class="empty-state"><h3>Carrinho vazio</h3><button class="btn btn-outline mt-4" onclick="window.navigate('home')">Voltar</button></div>`;
   let total = 0;
-  const html = items.map(([pid, i]) => { const p = state.products.find(x => x.id === pid); if (!p) return ''; total += (p.promoPrice || p.price) * i.qty; return `<div class="cart-item"><div class="info"><div class="name">${p.name}</div><div class="price">${brl(p.promoPrice || p.price)}</div></div><div class="qty"><button onclick="window.updateCartQty('${pid}', ${i.qty - 1})">-</button><span>${i.qty}</span><button onclick="window.updateCartQty('${pid}', ${i.qty + 1})">+</button></div></div>`; }).join('');
-  appEl().innerHTML = `<h2 class="section-title">Carrinho</h2><div class="cart-list">${html}</div><div class="cart-summary mt-4"><div class="total">${brl(total)}</div><button class="btn btn-primary" onclick="window.navigate('checkout')">Checkout</button></div>`;
+  const html = items.map(([pid, i]) => { const p = state.products.find(x => x.id === pid); if (!p) return ''; total += (p.promoPrice || p.price) * i.qty; return `<div class="card mb-4 flex-between"><div><div style="font-weight: 600;">${p.name}</div><div class="muted">${brl(p.promoPrice || p.price)}</div></div><div class="flex items-center gap-2"><button class="btn btn-outline" onclick="window.updateCartQty('${pid}', ${i.qty - 1})">-</button><span>${i.qty}</span><button class="btn btn-outline" onclick="window.updateCartQty('${pid}', ${i.qty + 1})">+</button></div></div>`; }).join('');
+  appEl().innerHTML = `<h2 class="section-title">Carrinho</h2>${html}<div class="card mt-6 flex-between items-center" style="background: var(--bg-elev-2);"><h3 style="margin: 0;">Total: ${brl(total)}</h3><button class="btn btn-primary" onclick="window.navigate('checkout')">Checkout</button></div>`;
 }
 
 async function renderCheckout() {
   if (!state.user) return navigate('login');
   const items = Object.entries(state.cart).map(([pid, i]) => { const p = state.products.find(x => x.id === pid); return { productId: pid, name: p.name, price: p.promoPrice || p.price, qty: i.qty }; });
   const total = items.reduce((acc, curr) => acc + (curr.price * curr.qty), 0);
-  appEl().innerHTML = `<div class="card wide"><h2>Finalizar Compra</h2><div class="pix-box mt-4"><span class="label">Chave PIX</span>${escapeHtml(state.settings.pixKey)}</div><div class="cart-summary mt-4"><div class="total">${brl(total)}</div><button class="btn btn-primary" id="btnFinish">Já Paguei</button></div></div>`;
+  appEl().innerHTML = `<div class="card card-wide"><h2 class="mb-4">Finalizar Compra</h2><div class="form-group"><label>Chave PIX</label><input type="text" value="${state.settings.pixKey}" disabled style="font-family: monospace; color: var(--primary);"></div><button class="btn btn-primary mt-6" id="btnFinish" style="width: 100%;">Já realizei o Pagamento</button></div>`;
   $('#btnFinish').onclick = async () => {
     await store.createOrder(state.user.uid, 'Cliente', items, total, 'PIX', '', [], null, false, null);
     await store.updateCart(state.user.uid, {});
@@ -171,44 +131,34 @@ async function renderCheckout() {
   };
 }
 
-/* ------------------------------ BOOTSTRAP ----------------------------- */
 state.unsubSettings = store.listenSettings((s) => { if (s.storeName) state.settings = s; renderHeader(); });
-state.unsubMaintenance = store.listenMaintenance((m) => {
-  state.maintenance = m;
-  if (m && !state.isAdmin) renderMaintenance();
-  else if (!m && state.route === 'maintenance') navigate('home');
-});
+state.unsubMaintenance = store.listenMaintenance((m) => { state.maintenance = m; if (m && !state.isAdmin) renderMaintenance(); else if (!m && state.route === 'maintenance') navigate('home'); });
 store.listenCoupons((c) => { state.coupons = c; });
 
 onAuthStateChanged(auth, async (user) => {
   state.user = user;
   if (user) {
+    window.currentUserUid = user.uid;
     state.isOwner = ADMINS.includes(user.email);
     state.isAdmin = ADMINS.includes(user.email);
-    
     if (state.unsubCart) state.unsubCart();
     state.unsubCart = store.listenCart(user.uid, (c) => { state.cart = c; renderHeader(); });
-
     if (state.unsubFavs) state.unsubFavs();
     state.unsubFavs = store.listenFavorites(user.uid, (f) => { state.favorites = f; if (state.route === 'home') renderHome(); });
-    
     await store.saveCustomerProfile(user);
   } else {
+    window.currentUserUid = null;
     state.isAdmin = false; state.cart = {}; state.favorites = {};
     if (state.unsubCart) state.unsubCart();
     if (state.unsubFavs) state.unsubFavs();
     renderHeader();
   }
-
   if (state.maintenance && !state.isAdmin && state.route !== 'login') renderMaintenance();
   else if (state.route === 'home') renderHome(); else navigate(state.route, state.params);
 });
 
 if (state.unsubProducts) state.unsubProducts();
-state.unsubProducts = store.listenProducts((list) => {
-  state.products = list;
-  if (state.route === 'home') renderHome();
-});
+state.unsubProducts = store.listenProducts((list) => { state.products = list; if (state.route === 'home') renderHome(); });
 
 document.getElementById('year').textContent = new Date().getFullYear();
 navigate('home');
