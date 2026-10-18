@@ -106,6 +106,7 @@ export const store = {
     };
     await setDoc(orderRef, orderData);
     
+    // Baixa de estoque automática
     for (const item of items) {
       const pRef = ref(db, `products/${item.productId}/stock`);
       const snap = await get(pRef);
@@ -115,7 +116,6 @@ export const store = {
         await set(pRef, newStock);
       }
     }
-    
     return orderRef.id;
   },
 
@@ -197,5 +197,16 @@ export const store = {
   async removeVendedor(email) {
     const safeEmail = email.replace(/\./g, ',');
     await remove(ref(db, `vendedores/${safeEmail}`));
+  },
+
+  /* =====================================================================
+     CONFIGURAÇÕES (Realtime Database)
+     ===================================================================== */
+  listenSettings(callback) {
+    return onValue(ref(db, 'settings'), (snapshot) => callback(snapshot.val() || {}));
+  },
+
+  async saveSettings(data) {
+    await update(ref(db, 'settings'), data);
   }
 };
