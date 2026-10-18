@@ -1,37 +1,27 @@
-// src/js/customers.js
-import { db } from './firebase-config.js';
-import { 
-  doc, getDoc, setDoc, updateDoc 
-} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
-import { getState } from './store.js';
+import { firestore } from './firebase-config.js';
+import { doc, getDoc, setDoc } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import { getAuth } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 
-// Busca os dados do perfil do cliente logado
 export async function getMyProfile() {
-  const state = getState();
-  if (!state.user) return null;
-
-  const docRef = doc(db, 'customers', state.user.uid);
-  const docSnap = await getDoc(docRef);
-  
-  if (docSnap.exists()) {
-    return { id: docSnap.id, ...docSnap.data() };
-  }
-  return null;
+  const user = getAuth().currentUser;
+  if (!user) return null;
+  const snap = await getDoc(doc(firestore, 'customers', user.uid));
+  return snap.exists() ? snap.data() : null;
 }
 
-// Atualiza ou cria os dados do perfil
 export async function saveMyProfile(data) {
-  const state = getState();
-  if (!state.user) throw new Error('Usuário não autenticado.');
-
-  const docRef = doc(db, 'customers', state.user.uid);
-  const payload = {
-    ...data,
-    email: state.user.email,
-    updatedAt: Date.now()
-  };
-
-  // setDoc com merge:true cria se não existir, ou atualiza os campos
-  await setDoc(docRef, payload, { merge: true });
-  return payload;
+  const user = getAuth().currentUser;
+  if (!user) return;
+  const userRef = doc(firestore, 'customers', user.uid);
+  const snap = await getDoc(userRef);
+  
+  if (!snap.exists()) {
+    await setDoc(userRef, { 
+      email: user.email || '', 
+      name: data.name || user.displayName || 'Cliente', 
+      createdAt: new Date().getTime() 
+    });
+  } else if (data.name) {
+    await setDoc(userRef, { name: data.name }, { merge: true });
+  }
 }
