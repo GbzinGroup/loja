@@ -11,14 +11,11 @@ import {
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 export const store = {
-  /* =====================================================================
-     PRODUTOS (Realtime Database)
-     ===================================================================== */
+  /* ================= PRODUTOS ================= */
   listenProducts(callback) {
     return onValue(ref(db, 'products'), (snapshot) => {
       const data = snapshot.val() || {};
       const list = Object.entries(data).map(([id, v]) => ({ id, ...v }));
-      // Ordena pelos mais recentes
       list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
       callback(list);
     });
@@ -67,9 +64,7 @@ export const store = {
     await remove(ref(db, `products/${id}`));
   },
 
-  /* =====================================================================
-     CARRINHO E FAVORITOS (Realtime Database)
-     ===================================================================== */
+  /* ================= CARRINHO E FAVORITOS ================= */
   listenCart(userId, callback) {
     if (!userId) return () => {};
     return onValue(ref(db, `carts/${userId}`), (snap) => callback(snap.val() || {}));
@@ -90,9 +85,7 @@ export const store = {
     else await set(refFav, true);
   },
 
-  /* =====================================================================
-     CUPONS E CONFIGURAÇÕES (Realtime Database)
-     ===================================================================== */
+  /* ================= CUPONS E CONFIGURAÇÕES ================= */
   listenSettings(callback) {
     return onValue(ref(db, 'settings'), (snapshot) => callback(snapshot.val() || {}));
   },
@@ -121,9 +114,7 @@ export const store = {
     } catch { return null; }
   },
 
-  /* =====================================================================
-     PEDIDOS E AVALIAÇÕES (Firestore)
-     ===================================================================== */
+  /* ================= PEDIDOS E AVALIAÇÕES ================= */
   async createOrder(userId, customerName, items, total, paymentMethod, cpf, extras, coupon, isGift, giftTo) {
     const orderRef = doc(collection(firestore, 'orders'));
     const orderData = {
@@ -142,7 +133,6 @@ export const store = {
     };
     await setDoc(orderRef, orderData);
 
-    // Baixa de estoque e contador de vendas
     for (const item of items) {
       const pRef = ref(db, `products/${item.productId}`);
       const snap = await get(pRef);
@@ -198,9 +188,7 @@ export const store = {
     } catch { return []; }
   },
 
-  /* =====================================================================
-     CLIENTES E VENDEDORES
-     ===================================================================== */
+  /* ================= CLIENTES E VENDEDORES ================= */
   async saveCustomerProfile(user, extra = {}) {
     if (!user) return;
     try {
@@ -213,9 +201,7 @@ export const store = {
           createdAt: serverTimestamp() 
         });
       }
-    } catch (e) { 
-      console.warn("Aviso ao salvar perfil:", e.message); 
-    }
+    } catch (e) { console.warn(e); }
   },
 
   async getCustomerProfile(userId) {
@@ -230,17 +216,18 @@ export const store = {
     return onValue(ref(db, 'vendedores'), (snapshot) => callback(snapshot.val() || {}));
   },
 
-  async addVendedor(email, nome) {
-    const safeEmail = email.replace(/\./g, ',');
-    await set(ref(db, `vendedores/${safeEmail}`), { 
+  // IMPORTANTE: Agora salvamos o UID do vendedor para a Regra do Firebase validar
+  async addVendedor(email, nome, uid) {
+    const safeKey = uid || email.replace(/\./g, ','); // Usa UID se tiver, senão e-mail
+    await set(ref(db, `vendedores/${safeKey}`), { 
       email, 
       nome, 
+      uid: uid || '', 
       addedAt: Date.now() 
     });
   },
 
-  async removeVendedor(email) {
-    const safeEmail = email.replace(/\./g, ',');
-    await remove(ref(db, `vendedores/${safeEmail}`));
+  async removeVendedor(key) {
+    await remove(ref(db, `vendedores/${key}`));
   }
 };
