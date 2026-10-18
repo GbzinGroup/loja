@@ -3,7 +3,7 @@ import { ref, push, set, update, remove, onValue, get } from 'https://www.gstati
 import { collection, doc, setDoc, getDoc, getDocs, query as fsQuery, where, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 export const store = {
-  // ========== PRODUTOS ==========
+  // PRODUTOS
   listenProducts(callback) {
     return onValue(ref(db, 'products'), (snapshot) => {
       const data = snapshot.val() || {};
@@ -21,7 +21,7 @@ export const store = {
   async toggleProductStatus(id, current) { await update(ref(db, `products/${id}`), { active: !current }); },
   async deleteProduct(id) { await remove(ref(db, `products/${id}`)); },
 
-  // ========== CARRINHO E FAVORITOS ==========
+  // CARRINHO E FAVORITOS
   listenCart(uid, cb) { if (!uid) return () => {}; return onValue(ref(db, `carts/${uid}`), (s) => cb(s.val() || {})); },
   async updateCart(uid, data) { await set(ref(db, `carts/${uid}`), data); },
   listenFavorites(uid, cb) { if (!uid) return () => {}; return onValue(ref(db, `favorites/${uid}`), (s) => cb(s.val() || {})); },
@@ -30,21 +30,28 @@ export const store = {
     if (isFav) await remove(r); else await set(r, true);
   },
 
-  // ========== CONFIGURAÇÕES E MANUTENÇÃO ==========
+  // CONFIGURAÇÕES E MANUTENÇÃO
   listenSettings(cb) { return onValue(ref(db, 'settings'), (s) => cb(s.val() || {})); },
   async saveSettings(data) { await update(ref(db, 'settings'), data); },
   listenMaintenance(cb) { return onValue(ref(db, 'maintenance'), (s) => cb(s.val() === true)); },
   async saveMaintenance(status) { await set(ref(db, 'maintenance'), status); },
 
-  // ========== CUPONS ==========
+  // CUPONS
   listenCoupons(cb) { return onValue(ref(db, 'coupons'), (s) => cb(s.val() || {})); },
-  async addCoupon(code, discount, type) { await set(ref(db, `coupons/${code.toUpperCase()}`), { code: code.toUpperCase(), discount: Number(discount), type, active: true }); },
+  async addCoupon(code, discount, type) { 
+    await set(ref(db, `coupons/${code.toUpperCase()}`), { code: code.toUpperCase(), discount: Number(discount), type, active: true }); 
+  },
+  async removeCoupon(code) {
+    await remove(ref(db, `coupons/${code.toUpperCase()}`));
+  },
   async validateCoupon(code) {
-    const snap = await get(ref(db, `coupons/${code.toUpperCase()}`));
-    return snap.exists() ? snap.val() : null;
+    try {
+      const snap = await get(ref(db, `coupons/${code.toUpperCase()}`));
+      return snap.exists() ? snap.val() : null;
+    } catch { return null; }
   },
 
-  // ========== PEDIDOS ==========
+  // PEDIDOS
   async createOrder(uid, name, items, total, method, cpf, extras, coupon, isGift, giftTo) {
     const orderRef = doc(collection(firestore, 'orders'));
     await setDoc(orderRef, { userId: uid, customerName: name, items, total, paymentMethod: method, cpf: cpf || 'N/I', extras: extras || [], coupon: coupon || null, isGift: isGift || false, giftTo: giftTo || null, status: 'pending', createdAt: serverTimestamp() });
@@ -70,7 +77,7 @@ export const store = {
   },
   async updateOrderStatus(orderId, status) { await setDoc(doc(firestore, 'orders', orderId), { status }, { merge: true }); },
 
-  // ========== CLIENTES E AVALIAÇÕES ==========
+  // CLIENTES E REVIEWS
   async saveCustomerProfile(user, extra = {}) {
     if (!user) return;
     const userRef = doc(firestore, 'customers', user.uid);
@@ -81,10 +88,6 @@ export const store = {
     if (!uid) return null;
     const snap = await getDoc(doc(firestore, 'customers', uid));
     return snap.exists() ? snap.data() : null;
-  },
-  async getAllCustomers() {
-    const snap = await getDocs(collection(firestore, 'customers'));
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
   },
   async addReview(productId, uid, name, rating, comment) {
     const rRef = doc(collection(firestore, 'reviews', productId, 'items'));
