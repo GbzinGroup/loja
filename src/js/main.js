@@ -2,36 +2,27 @@
    main.js — SPA Core Gbzin Shop
    ===================================================================== */
 import { auth } from './firebase-config.js';
-import { 
-  createUserWithEmailAndPassword, 
-  signInWithEmailAndPassword, 
-  signOut, 
-  onAuthStateChanged 
-} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import { store } from './store.js';
 import { $, appEl, headerEl, brl, escapeHtml, toast, icons, maskCPF, formatDate } from './utils.js';
 import { renderAdmin } from './admin.js';
 import { renderSupport } from './support.js';
 
-// LISTA DE ADMINS (Você e todos os e-mails enviados)
 const ADMINS = [
-  "gabrielcordeirosilva2010@gmail.com",
-  "10pedrin0@gmail.com",
-  "lucaslyra875@gmail.com",
-  "gbzinstudio@gmail.com",
-  "Voabernas@gmail.com"
+  "gabrielcordeirosilva2010@gmail.com", "10pedrin0@gmail.com",
+  "lucaslyra875@gmail.com", "gbzinstudio@gmail.com", "Voabernas@gmail.com"
 ];
 
 const state = {
   route: 'home', params: {}, user: null, isAdmin: false, isOwner: false,
   products: [], cart: {}, favorites: {}, settings: { storeName: 'Gbzin Shop' },
-  maintenance: false, profileTab: 'data', // Aba padrão do perfil
+  maintenance: false, profileTab: 'data',
   unsubCart: null, unsubProducts: null, unsubSettings: null, unsubFavs: null, unsubMaintenance: null
 };
 
 /* ------------------------------ HEADER -------------------------------- */
 function renderHeader() {
-  if (state.maintenance && !state.isAdmin) return; // Se estiver em manutenção e não for admin, não mostra header normal
+  if (state.maintenance && !state.isAdmin) return;
 
   let account = '';
   if (state.user) {
@@ -62,7 +53,6 @@ function renderHeader() {
 function navigate(route, params = {}) {
   state.route = route; state.params = { ...state.params, ...params };
   
-  // Bloqueio de Manutenção
   if (state.maintenance && !state.isAdmin && route !== 'login' && route !== 'maintenance') {
      return renderMaintenance();
   }
@@ -158,7 +148,7 @@ async function renderProductDetails(id) {
   `;
 }
 
-/* ------------------------------ CONTA E PERFIL (ABAS) ----------------- */
+/* ------------------------------ CONTA E PERFIL ------------------------ */
 async function renderAccount() {
   if (!state.user) return navigate('login'); 
   const p = await store.getCustomerProfile(state.user.uid); 
@@ -211,7 +201,6 @@ async function renderAccount() {
 window.setProfileTab = (t) => { state.profileTab = t; renderAccount(); };
 window.signOutUser = async () => { await signOut(auth); toast('Saiu.', 'success'); };
 
-/* ------------------------------ FAVORITOS (Atalho) -------------------- */
 function renderFavorites() {
   if (!state.user) return navigate('login');
   state.profileTab = 'favorites';
@@ -273,38 +262,166 @@ async function renderCheckout() {
   };
 }
 
-/* ------------------------------ PRODUTO FORM -------------------------- */
+/* =====================================================================
+   FORMULÁRIO DE PRODUTO MELHORADO E COMPLEXO
+   ===================================================================== */
 function renderProductForm(id) {
-  if (!state.isAdmin) return navigate('login');
+  if (!state.isAdmin) { toast('Acesso restrito.', 'error'); return navigate('login'); }
+  
   const ed = id ? state.products.find((p) => p.id === id) : null;
+  const isDraft = ed ? ed.active === false : false;
+
   appEl().innerHTML = `
-    <div class="card wide" style="max-width:650px;">
-      <h2>${ed ? 'Editar' : 'Novo'} produto</h2>
-      <form id="productForm">
-        <div class="form-group"><label>Nome</label><input type="text" id="pName" required value="${ed ? escapeHtml(ed.name) : ''}" /></div>
-        <div style="display:flex; gap:16px;">
-          <div class="form-group" style="flex:1;"><label>Preço (R$)</label><input type="number" id="pPrice" step="0.01" required value="${ed ? ed.price : ''}" /></div>
-          <div class="form-group" style="flex:1;"><label>Estoque</label><input type="number" id="pStock" required value="${ed ? ed.stock : '10'}" /></div>
+    <div class="card wide" style="max-width:900px; width:100%;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
+        <h2>${ed ? 'Editar Produto' : 'Cadastrar Novo Produto'}</h2>
+        <button class="btn btn-outline" onclick="window.navigate('admin', {tab:'products'})">Voltar</button>
+      </div>
+
+      <form id="productForm" style="display:grid; grid-template-columns: 1fr 1fr; gap:24px;">
+        
+        <!-- Coluna Esquerda: Imagem e Status -->
+        <div style="display:flex; flex-direction:column; gap:16px;">
+          <div class="form-group">
+            <label>Imagem do Produto (Upload)</label>
+            <div style="border: 2px dashed var(--border-strong); padding: 20px; border-radius: 12px; text-align: center; position: relative; min-height:250px; display:flex; flex-direction:column; align-items:center; justify-content:center; cursor:pointer;">
+               <input type="file" id="pFile" accept="image/*" style="position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; height:100%;" />
+               ${ed?.image ? `<img id="imgPreview" src="${ed.image}" style="max-width:100%; max-height:200px; object-fit:cover; border-radius:8px;" />` : `<img id="imgPreview" style="display:none; max-width:100%; max-height:200px; object-fit:cover; border-radius:8px;" />`}
+               <div id="uploadText" style="${ed?.image ? 'display:none' : 'display:flex; flex-direction:column; align-items:center;'}">
+                 <span style="font-size:2rem; margin-bottom:8px;">📸</span>
+                 <span class="muted">Clique para escolher uma imagem</span>
+               </div>
+            </div>
+          </div>
+
+          <div class="form-group" style="background:var(--bg-elev); padding:16px; border-radius:8px;">
+            <label style="margin-bottom:12px;">Status de Publicação</label>
+            <label style="display:flex; align-items:center; gap:8px; cursor:pointer; margin-bottom:8px;">
+              <input type="radio" name="pStatus" value="true" ${!isDraft ? 'checked' : ''}> Publicar (Visível na loja)
+            </label>
+            <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+              <input type="radio" name="pStatus" value="false" ${isDraft ? 'checked' : ''}> Salvar como Rascunho (Oculto)
+            </label>
+          </div>
         </div>
-        <div class="form-group"><label>Categoria</label><input type="text" id="pCategory" required value="${ed ? escapeHtml(ed.category) : ''}" /></div>
-        <div class="form-group"><label>Imagem (Upload)</label><input type="file" id="pFile" accept="image/*" /></div>
-        <div class="form-actions"><button type="submit" class="btn btn-primary">Salvar</button></div>
+
+        <!-- Coluna Direita: Informações -->
+        <div style="display:flex; flex-direction:column; gap:16px;">
+          <div class="form-group">
+            <label>Nome do Produto</label>
+            <input type="text" id="pName" required value="${ed ? escapeHtml(ed.name) : ''}" placeholder="Ex: Capa Optifine Pro" />
+          </div>
+
+          <div style="display:flex; gap:16px;">
+            <div class="form-group" style="flex:1;">
+              <label>Preço Original (R$)</label>
+              <input type="number" id="pPrice" step="0.01" min="0" required value="${ed ? ed.price : ''}" placeholder="0.00" />
+            </div>
+            <div class="form-group" style="flex:1;">
+              <label>Preço Promocional (Opcional)</label>
+              <input type="number" id="pPromo" step="0.01" min="0" value="${ed ? ed.promoPrice : ''}" placeholder="0.00" />
+            </div>
+          </div>
+
+          <div style="display:flex; gap:16px;">
+            <div class="form-group" style="flex:1;">
+              <label>Estoque Disponível</label>
+              <input type="number" id="pStock" min="0" required value="${ed ? ed.stock : '10'}" />
+            </div>
+            <div class="form-group" style="flex:1;">
+              <label>Categoria / Estilo</label>
+              <input type="text" id="pCategory" required value="${ed ? escapeHtml(ed.category) : ''}" placeholder="Ex: Anime, Futebol..." />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Raridade da Capa</label>
+            <select id="pRarity" class="filter-select" style="width:100%; height:42px;">
+              <option value="Comum" ${ed?.rarity === 'Comum' ? 'selected' : ''}>Comum</option>
+              <option value="Rara" ${ed?.rarity === 'Rara' ? 'selected' : ''}>Rara</option>
+              <option value="Épica" ${ed?.rarity === 'Épica' ? 'selected' : ''}>Épica</option>
+              <option value="Lendária" ${ed?.rarity === 'Lendária' ? 'selected' : ''}>Lendária</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Descrição Detalhada</label>
+            <textarea id="pDesc" rows="4" placeholder="Descreva os detalhes da capa...">${ed ? escapeHtml(ed.description) : ''}</textarea>
+          </div>
+
+          <!-- Sistema de Tempo Limitado -->
+          <div class="form-group" style="background:var(--bg-elev); padding:16px; border-radius:8px; border:1px solid var(--border);">
+            <label style="display:flex; align-items:center; gap:8px; cursor:pointer; margin-bottom:12px;">
+              <input type="checkbox" id="pLimited" ${ed?.isLimited ? 'checked' : ''} onchange="document.getElementById('pExpires').disabled = !this.checked" />
+              <strong>Ativar Capa Limitada (Promoção Relâmpago)</strong>
+            </label>
+            <label>Data e Hora de Expiração:</label>
+            <input type="datetime-local" id="pExpires" value="${ed?.expiresAt ? new Date(ed.expiresAt).toISOString().slice(0,16) : ''}" ${!ed?.isLimited ? 'disabled' : ''} style="padding:8px; background:var(--bg); border:1px solid var(--border); color:var(--text); border-radius:8px; width:100%;" />
+          </div>
+
+          <div class="form-actions" style="margin-top:16px;">
+            <button type="submit" class="btn btn-primary" id="btnSubmit" style="padding:14px; font-size:1rem;">${ed ? 'Salvar Alterações' : 'Cadastrar Produto'}</button>
+          </div>
+        </div>
       </form>
     </div>`;
-  
+
   let base64Image = ed ? ed.image : '';
-  $('#pFile').addEventListener('change', (e) => {
+  
+  $('#pFile').addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) return toast('Imagem muito grande (Máx 2MB)', 'error');
+    
     const reader = new FileReader();
-    reader.onload = (ev) => base64Image = ev.target.result;
-    reader.readAsDataURL(e.target.files[0]);
+    reader.onload = (ev) => { 
+      base64Image = ev.target.result; 
+      $('#imgPreview').src = base64Image; 
+      $('#imgPreview').style.display = 'block';
+      $('#uploadText').style.display = 'none';
+    };
+    reader.readAsDataURL(file);
   });
 
-  $('#productForm').onsubmit = async (e) => {
+  $('#productForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const data = { name: $('#pName').value, price: Number($('#pPrice').value), stock: Number($('#pStock').value), category: $('#pCategory').value, image: base64Image };
-    if (ed) await store.updateProduct(ed.id, data); else await store.addProduct(data);
-    toast('Salvo!', 'success'); navigate('admin', {tab: 'products'});
-  };
+    const btn = $('#btnSubmit'); 
+    btn.textContent = 'Salvando...'; 
+    btn.disabled = true;
+    
+    let expiresVal = 0;
+    if ($('#pLimited').checked && $('#pExpires').value) {
+      expiresVal = new Date($('#pExpires').value).getTime();
+    }
+    
+    const isActive = document.querySelector('input[name="pStatus"]:checked').value === 'true';
+
+    const data = { 
+      name: $('#pName').value.trim(), 
+      price: Number($('#pPrice').value), 
+      promoPrice: Number($('#pPromo').value) || 0,
+      stock: Number($('#pStock').value),
+      category: $('#pCategory').value.trim(),
+      rarity: $('#pRarity').value,
+      isLimited: $('#pLimited').checked,
+      expiresAt: expiresVal,
+      description: $('#pDesc').value.trim(), 
+      image: base64Image,
+      active: isActive
+    };
+    
+    try {
+      if (ed) await store.updateProduct(ed.id, data); 
+      else await store.addProduct(data);
+      toast('Produto salvo com sucesso!', 'success'); 
+      navigate('admin', {tab:'products'});
+    } catch (err) { 
+      toast('Erro ao salvar.', 'error'); 
+      console.error(err); 
+      btn.disabled = false; 
+      btn.textContent = 'Salvar'; 
+    }
+  });
 }
 
 /* ------------------------------ BOOTSTRAP ----------------------------- */
