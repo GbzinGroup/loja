@@ -1,28 +1,25 @@
-// src/js/reviews.js
-import { db } from './firebase-config.js';
-import { 
-  collection, addDoc, getDocs, query, orderBy, serverTimestamp 
-} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
-import { getState } from './store.js';
-
-const getReviewsRef = (productId) => collection(db, 'reviews', productId, 'items');
+import { firestore } from './firebase-config.js';
+import { collection, doc, setDoc, getDocs, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import { getAuth } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 
 export async function getProductReviews(productId) {
-  const q = query(getReviewsRef(productId), orderBy('createdAt', 'desc'));
-  const snapshot = await getDocs(q);
-  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  const snap = await getDocs(collection(firestore, 'reviews', productId, 'items'));
+  return snap.docs
+    .map(d => ({ id: d.id, ...d.data() }))
+    .sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0));
 }
 
 export async function addReview(productId, rating, comment) {
-  const state = getState();
-  if (!state.user) throw new Error('Você precisa estar logado para avaliar.');
-  if (rating < 1 || rating > 5) throw new Error('A nota deve ser entre 1 e 5.');
+  const user = getAuth().currentUser;
+  if (!user) throw new Error('Precisa estar logado.');
+  if (rating < 1 || rating > 5) throw new Error('Nota deve ser de 1 a 5.');
 
-  return await addDoc(getReviewsRef(productId), {
-    userId: state.user.uid,
-    userName: state.user.displayName || 'Cliente',
+  const reviewRef = doc(collection(firestore, 'reviews', productId, 'items'));
+  await setDoc(reviewRef, {
+    userId: user.uid,
+    userName: user.displayName || 'Cliente',
     rating: Number(rating),
-    comment: comment.trim(),
-    createdAt: Date.now(), // Usando number para manter o padrão do seu projeto
+    comment,
+    createdAt: serverTimestamp()
   });
 }
