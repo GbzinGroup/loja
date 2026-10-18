@@ -2,19 +2,55 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Gbzin Shop</title>
-  <link rel="stylesheet" href="style.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="description" content="Gbzin Shop — capas personalizadas e produtos exclusivos para o seu perfil." />
+  <meta name="theme-color" content="#0f1115" />
+  <meta name="color-scheme" content="dark" />
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="Gbzin Shop" />
+  <meta property="og:description" content="Capas personalizadas e produtos exclusivos." />
+  <meta property="og:type" content="website" />
+  <meta property="og:image" content="/assets/og-cover.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+
+  <title>Gbzin Shop — Capas & Produtos Exclusivos</title>
+
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
+  <link rel="canonical" href="https://gbzinshop.example.com/" />
+
+  <!-- Preconnect fontes -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap"
+    rel="stylesheet"
+  />
+
+  <!-- Preload do CSS crítico -->
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <header id="header" class="header"></header>
-  <main id="app" class="app" aria-live="polite"></main>
-  <footer class="footer">
-    <p>&copy; <span id="year"></span> Gbzin Shop — Todos os direitos reservados.</p>
+  <a href="#app" class="skip-link">Pular para o conteúdo</a>
+
+  <header id="header" class="header" aria-label="Cabeçalho principal"></header>
+
+  <main id="app" class="app" role="main" aria-busy="false"></main>
+
+  <div id="toast-region" class="toast-region" role="status" aria-live="polite" aria-atomic="false"></div>
+
+  <footer class="footer" role="contentinfo">
+    <p>
+      &copy; <span id="year"></span> Gbzin Shop — Todos os direitos reservados.
+    </p>
   </footer>
+
+  <noscript>
+    <div class="noscript-banner">
+      Ative o JavaScript para usar a loja.
+    </div>
+  </noscript>
+
   <script type="module" src="src/js/main.js"></script>
 </body>
 </html>
