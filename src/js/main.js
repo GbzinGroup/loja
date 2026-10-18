@@ -1,1 +1,546 @@
-.
+/* =====================================================================
+   main.js — SPA Core Gbzin Shop
+   ===================================================================== */
+import { auth } from './firebase-config.js';
+import { 
+  createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword, 
+  signOut, 
+  onAuthStateChanged 
+} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import { store } from './store.js';
+import { $, appEl, headerEl, brl, escapeHtml, toast, icons, maskCPF, formatDate } from './utils.js';
+
+const ADMIN_EMAIL = "gabrielcordeirosilva2010@gmail.com";
+
+const state = {
+  route: 'home', params: {}, user: null, isAdmin: false, isOwner: false,
+  products: [], cart: {}, vendedores: {}, unsubCart: null, unsubVendedores: null, unsubProducts: null
+};
+
+/* ------------------------------ HEADER -------------------------------- */
+function renderHeader() {
+  let account = '';
+  if (state.user) {
+    if (state.isAdmin) account += `<button class="btn btn-outline" data-nav="admin">🛠️ <span class="label">Painel</span></button>`;
+    account += `<button class="btn btn-outline" data-nav="account">👤 <span class="label">Conta</span></button>`;
+    account += `<button class="btn btn-outline" id="logoutBtn">🚪 <span class="label">Sair</span></button>`;
+  } else {
+    account = `<button class="btn btn-outline" data-nav="login">👤 <span class="label">Entrar</span></button>`;
+  }
+
+  const count = Object.values(state.cart).reduce((s, i) => s + (i.qty || 0), 0);
+
+  headerEl().innerHTML = `
+    <div class="header-inner">
+      <div class="logo" data-nav="home">Gbzin Shop</div>
+      <div class="search-bar">
+        <span class="icon">🔍</span>
+        <input id="searchInput" type="text" placeholder="Buscar produtos..." value="${escapeHtml(state.params.q || '')}" />
+      </div>
+      <div class="header-actions">
+        <button class="btn btn-icon btn-outline" data-nav="cart" title="Carrinho">🛒${count > 0 ? `<span class="badge">${count}</span>` : ''}</button>
+        ${account}
+      </div>
+    </div>`;
+
+  headerEl().querySelectorAll('[data-nav]').forEach((el) => el.addEventListener('click', () => navigate(el.getAttribute('data-nav'))));
+  $('#logoutBtn')?.addEventListener('click', async () => { await signOut(auth); toast('Sessão encerrada.', 'success'); });
+  $('#searchInput')?.addEventListener('input', (e) => { state.params.q = e.target.value; if (state.route !== 'home') state.route = 'home'; renderHome(); });
+}
+
+/* ------------------------------ NAVEGAÇÃO ----------------------------- */
+function navigate(route, params = {}) {
+  state.route = route; state.params = { ...state.params, ...params };
+  if (route !== 'home') state.params.q = '';
+  renderHeader();
+  switch (route) {
+    case 'home': return renderHome();
+    case 'login': return renderLogin();
+    case 'register': return renderRegister();
+    case 'account': return renderAccount();
+    case 'admin': return renderAdmin(params.tab || 'dashboard');
+    case 'product-form': return renderProductForm(params.id);
+    case 'cart': return renderCart();
+    case 'checkout': return renderCheckout();
+    default: return renderHome();
+  }
+}
+window.navigate = navigate;
+
+/* ------------------------------ HOME ---------------------------------- */
+function renderHome() {
+  const q = (state.params.q || '').toLowerCase().trim();
+  let list = state.products.filter(p => p.active !== false);
+  
+  if (q) list = list.filter((p) => p.name.toLowerCase().includes(q) || (p.category || '').toLowerCase().includes(q));
+
+  const grid = list.length ? `<div class="product-grid">${list.map((p) => `
+      <div class="product-card">
+        <div class="thumb">${p.image ? `<img src="${p.image}" />` : `<div class="placeholder">🛍️</div>`}</div>
+        <div class="info">
+          <div class="category" style="font-size:0.75rem; color:var(--primary); text-transform:uppercase;">${escapeHtml(p.category || 'Geral')}</div>
+          <div class="name">${escapeHtml(p.name)}</div>
+          <div class="price">${brl(p.price)}</div>
+          ${p.stock <= 5 ? `<div style="color:var(--danger); font-size:0.75rem;">Apenas ${p.stock} em estoque!</div>` : ''}
+        </div>
+        <div class="actions">
+          <button class="btn btn-primary" data-add="${p.id}" ${p.stock <= 0 ? 'disabled style="opacity:0.5;cursor:not-allowed"' : ''}>
+            ${p.stock <= 0 ? 'Esgotado' : 'Adicionar'}
+          </button>
+        </div>
+      </div>`).join('')}</div>` 
+    : `<div class="empty-state"><div class="emoji">🛒</div><h3>${q ? 'Nada encontrado' : 'Catálogo vazio'}</h3></div>`;
+
+  appEl().innerHTML = `<h2 class="section-title">${q ? `Busca: "${escapeHtml(q)}"` : 'Catálogo'}</h2>${grid}`;
+  appEl().querySelectorAll('[data-add]').forEach((b) => b.addEventListener('click', async () => {
+    if (!state.user) { toast('Faça login para comprar.', 'error'); return navigate('login'); }
+    await store.addToCart(state.user.uid, b.getAttribute('data-add'), 1);
+    toast('Adicionado!', 'success');
+  }));
+}
+
+/* -------------------------- PAINEL ADMIN ------------------------------ */
+async function renderAdmin(tab = 'dashboard') {
+  if (!state.isAdmin) return navigate('login');
+  
+  const totalEstoque = state.products.reduce((acc, p) => acc + (p.price * (p.stock || 0)), 0);
+  const qtdProdutos = state.products.length;
+  let content = '';
+
+  if (tab === 'dashboard') {
+    content = `
+      <div class="dashboard-grid" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:20px; margin-bottom:32px;">
+        <div class="card" style="padding:24px; border-left:4px solid var(--primary);">
+          <div style="display:flex; justify-content:space-between; color:var(--text-muted);">Produtos Ativos ${icons.box}</div>
+          <h2 style="font-size:2rem; margin-top:8px;">${qtdProdutos}</h2>
+        </div>
+        <div class="card" style="padding:24px; border-left:4px solid var(--success);">
+          <div style="display:flex; justify-content:space-between; color:var(--text-muted);">Valor do Estoque ${icons.dollar}</div>
+          <h2 style="font-size:2rem; margin-top:8px; color:var(--success);">${brl(totalEstoque)}</h2>
+        </div>
+      </div>
+      <div class="card" style="padding:32px; text-align:center;">
+        <h3>Visão Geral de Vendas</h3>
+        <p class="muted mt-2">Confira a aba de "Pedidos" para gerenciar as compras recebidas.</p>
+      </div>
+    `;
+  } 
+  else if (tab === 'products') {
+    const rows = state.products.length ? state.products.map((p) => `
+      <tr style="${p.active === false ? 'opacity:0.5;' : ''}">
+        <td>${p.image ? `<img src="${p.image}" style="width:50px;height:50px;object-fit:cover;border-radius:8px;" />` : '🛍️'}</td>
+        <td><strong>${escapeHtml(p.name)}</strong><br><span class="muted" style="font-size:0.75rem;">Cat: ${escapeHtml(p.category)} | Estoque: ${p.stock}</span></td>
+        <td style="color:var(--primary); font-weight:700;">${brl(p.price)}</td>
+        <td class="text-right">
+          <button class="btn btn-outline" style="padding:6px 12px; font-size:.8rem;" data-toggle="${p.id}" data-active="${p.active}">${p.active === false ? 'Ativar' : 'Pausar'}</button>
+          <button class="btn btn-outline" style="padding:6px 12px; font-size:.8rem;" data-edit="${p.id}">${icons.edit}</button> 
+          <button class="btn btn-danger" style="padding:6px 12px; font-size:.8rem;" data-del="${p.id}">${icons.trash}</button>
+        </td>
+      </tr>`).join('') : `<tr><td colspan="4" class="muted" style="text-align:center;padding:32px;">Vazio.</td></tr>`;
+
+    content = `
+      <div class="flex-between mb-4">
+        <h3>Meus Produtos</h3>
+        <button class="btn btn-primary" style="display:flex; gap:6px; align-items:center;" data-nav="product-form">${icons.plus} Novo Produto</button>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table"><thead><tr><th style="width:70px;">Foto</th><th>Info</th><th>Preço</th><th class="text-right">Ações</th></tr></thead><tbody>${rows}</tbody></table>
+      </div>
+    `;
+  }
+  else if (tab === 'orders') {
+    content = `<div style="text-align:center; padding: 40px;"><p class="muted">Buscando pedidos...</p></div>`;
+    appEl().innerHTML = `
+      <div style="max-width:1200px; margin:0 auto; width:100%;">
+        <div style="margin-bottom:24px; border-bottom:1px solid var(--border); display:flex; gap:24px; overflow-x:auto;">
+          <button class="tab-btn" onclick="window.navigate('admin', {tab: 'dashboard'})">Visão Geral</button>
+          <button class="tab-btn" onclick="window.navigate('admin', {tab: 'products'})">Produtos</button>
+          <button class="tab-btn active" onclick="window.navigate('admin', {tab: 'orders'})">Pedidos</button>
+          ${state.isOwner ? `<button class="tab-btn" onclick="window.navigate('admin', {tab: 'team'})">Vendedores</button>` : ''}
+        </div>
+        ${content}
+      </div>
+    `;
+
+    try {
+      const list = await store.getAllOrders(); 
+      const rows = list.length ? list.map(o => {
+        let statusColor = o.status === 'paid' ? 'var(--success)' : o.status === 'canceled' ? 'var(--danger)' : o.status === 'shipped' ? 'var(--primary)' : 'var(--warning)';
+        return `
+        <tr>
+          <td><span style="font-family:monospace; font-size:0.8rem; color:var(--text-muted);">#${o.id.slice(0,6).toUpperCase()}</span></td>
+          <td>
+            <strong>${escapeHtml(o.customerName || 'Cliente')}</strong><br>
+            <span class="muted" style="font-size:0.75rem;">${o.items.length} item(s) | CPF: ${escapeHtml(o.cpf || 'N/I')}</span>
+          </td>
+          <td style="font-weight:700; color:var(--success);">${brl(o.total)}</td>
+          <td>
+            <select data-order-status="${o.id}" style="padding:6px; border-radius:6px; background:var(--bg-elev); color:${statusColor}; border:1px solid ${statusColor}; font-weight:bold;">
+              <option value="pending" ${o.status === 'pending' ? 'selected' : ''}>⏳ Pendente</option>
+              <option value="paid" ${o.status === 'paid' ? 'selected' : ''}>✅ Pago</option>
+              <option value="shipped" ${o.status === 'shipped' ? 'selected' : ''}>📦 Enviado</option>
+              <option value="canceled" ${o.status === 'canceled' ? 'selected' : ''}>❌ Cancelado</option>
+            </select>
+          </td>
+        </tr>`;
+      }).join('') : `<tr><td colspan="4" class="muted" style="text-align:center;padding:32px;">Nenhum pedido encontrado ou sem permissão.</td></tr>`;
+
+      content = `
+        <h3 class="mb-4">Gerenciamento de Pedidos</h3>
+        <div class="table-wrap">
+          <table class="data-table"><thead><tr><th>ID</th><th>Cliente / CPF</th><th>Total</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>
+        </div>
+      `;
+      const container = appEl().querySelector('.tab-btn.active').parentElement.parentElement;
+      container.innerHTML = `
+        <div style="margin-bottom:24px; border-bottom:1px solid var(--border); display:flex; gap:24px; overflow-x:auto;">
+          <button class="tab-btn" onclick="window.navigate('admin', {tab: 'dashboard'})">Visão Geral</button>
+          <button class="tab-btn" onclick="window.navigate('admin', {tab: 'products'})">Produtos</button>
+          <button class="tab-btn active" onclick="window.navigate('admin', {tab: 'orders'})">Pedidos</button>
+          ${state.isOwner ? `<button class="tab-btn" onclick="window.navigate('admin', {tab: 'team'})">Vendedores</button>` : ''}
+        </div>
+        ${content}
+      `;
+
+      appEl().querySelectorAll('[data-order-status]').forEach((sel) => sel.addEventListener('change', async (e) => {
+        sel.style.opacity = '0.5';
+        await store.updateOrderStatus(sel.getAttribute('data-order-status'), e.target.value);
+        toast('Status do pedido atualizado!', 'success');
+        renderAdmin('orders'); 
+      }));
+    } catch (err) {
+      console.error(err);
+      const container = appEl().querySelector('.tab-btn.active').parentElement.parentElement;
+      container.innerHTML = `<div class="alert alert-error">Erro ao buscar pedidos. Verifique suas regras do Firestore.</div>`;
+    }
+    return; 
+  }
+  else if (tab === 'team' && state.isOwner) {
+    const vendedoresList = Object.values(state.vendedores).map(v => `
+      <div class="flex-between" style="background:var(--bg-elev); padding:16px; border-radius:8px; margin-bottom:12px; border:1px solid var(--border);">
+        <div style="display:flex; gap:12px; align-items:center;">
+          <div style="width:40px; height:40px; background:var(--primary-soft); border-radius:50%; display:grid; place-items:center; color:var(--primary); font-weight:bold;">${v.nome.charAt(0)}</div>
+          <div><strong>${escapeHtml(v.nome)}</strong> <br><span class="muted">${escapeHtml(v.email)}</span></div>
+        </div>
+        <button class="btn btn-danger" style="padding:6px 12px; font-size:.8rem;" data-del-vend="${v.email}">Remover</button>
+      </div>
+    `).join('');
+
+    content = `
+      <div class="card" style="max-width:600px; margin-bottom:24px; border-color:var(--primary);">
+        <h3>Adicionar Vendedor</h3>
+        <p class="muted mb-4">O e-mail inserido terá acesso ao painel.</p>
+        <form id="addVendForm" style="display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap;">
+          <div class="form-group" style="flex:1; margin:0;"><label>Nome</label><input type="text" id="vNome" required /></div>
+          <div class="form-group" style="flex:2; margin:0;"><label>E-mail</label><input type="email" id="vEmail" required /></div>
+          <button type="submit" class="btn btn-primary">Adicionar</button>
+        </form>
+      </div>
+      <h3>Equipe Atual</h3>
+      <div class="mt-4">${vendedoresList || '<p class="muted">Apenas você tem acesso no momento.</p>'}</div>
+    `;
+  }
+
+  appEl().innerHTML = `
+    <div style="max-width:1200px; margin:0 auto; width:100%;">
+      <div style="margin-bottom:24px; border-bottom:1px solid var(--border); display:flex; gap:24px; overflow-x:auto;">
+        <button class="tab-btn ${tab === 'dashboard' ? 'active' : ''}" onclick="window.navigate('admin', {tab: 'dashboard'})">Visão Geral</button>
+        <button class="tab-btn ${tab === 'products' ? 'active' : ''}" onclick="window.navigate('admin', {tab: 'products'})">Produtos</button>
+        <button class="tab-btn ${tab === 'orders' ? 'active' : ''}" onclick="window.navigate('admin', {tab: 'orders'})">Pedidos</button>
+        ${state.isOwner ? `<button class="tab-btn ${tab === 'team' ? 'active' : ''}" onclick="window.navigate('admin', {tab: 'team'})">Vendedores</button>` : ''}
+      </div>
+      ${content}
+    </div>
+  `;
+
+  appEl().querySelectorAll('[data-nav]').forEach((el) => el.addEventListener('click', () => navigate(el.getAttribute('data-nav'))));
+  appEl().querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => navigate('product-form', { id: b.getAttribute('data-edit') })));
+  appEl().querySelectorAll('[data-toggle]').forEach((b) => b.addEventListener('click', async () => {
+    await store.toggleProductStatus(b.getAttribute('data-toggle'), b.getAttribute('data-active') === 'true');
+    toast('Status alterado.', 'success');
+  }));
+  appEl().querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', async () => {
+    if (confirm('Excluir produto?')) { await store.deleteProduct(b.getAttribute('data-del')); toast('Excluído.', 'success'); }
+  }));
+
+  if (tab === 'team' && state.isOwner) {
+    $('#addVendForm')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = $('#vEmail').value.trim();
+      if (email === ADMIN_EMAIL) return toast('Você já é o dono.', 'error');
+      await store.addVendedor(email, $('#vNome').value.trim());
+      toast('Adicionado!', 'success');
+      e.target.reset();
+    });
+    appEl().querySelectorAll('[data-del-vend]').forEach((b) => b.addEventListener('click', async () => {
+      if (confirm('Remover vendedor?')) await store.removeVendedor(b.getAttribute('data-del-vend'));
+    }));
+  }
+}
+
+/* -------------------------- FORM PRODUTO ------------------------------ */
+function renderProductForm(id) {
+  if (!state.isAdmin) return navigate('login');
+  const ed = id ? state.products.find((p) => p.id === id) : null;
+  const previewHtml = ed?.image ? `<img id="imgPreview" src="${ed.image}" style="display:block; width:100%; height:200px; object-fit:cover; border-radius:8px; margin-top:12px;" />` : `<img id="imgPreview" style="display:none; width:100%; height:200px; object-fit:cover; border-radius:8px; margin-top:12px;" />`;
+
+  appEl().innerHTML = `
+    <div class="card wide" style="max-width:650px;">
+      <h2>${ed ? 'Editar' : 'Novo'} produto</h2>
+      <form id="productForm">
+        <div class="form-group"><label>Nome do Produto</label><input type="text" id="pName" required value="${ed ? escapeHtml(ed.name) : ''}" /></div>
+        
+        <div style="display:flex; gap:16px;">
+          <div class="form-group" style="flex:1;"><label>Preço (R$)</label><input type="number" id="pPrice" step="0.01" min="0" required value="${ed ? ed.price : ''}" /></div>
+          <div class="form-group" style="flex:1;"><label>Estoque (Qtd)</label><input type="number" id="pStock" min="0" required value="${ed ? ed.stock : '10'}" /></div>
+        </div>
+
+        <div class="form-group"><label>Categoria</label><input type="text" id="pCategory" placeholder="Ex: Roupas, Eletrônicos..." value="${ed ? escapeHtml(ed.category || '') : ''}" /></div>
+        <div class="form-group"><label>Descrição</label><textarea id="pDesc" rows="2">${ed ? escapeHtml(ed.description) : ''}</textarea></div>
+        
+        <div class="form-group">
+          <label>Upload de Imagem</label>
+          <div style="border: 2px dashed var(--border-strong); padding: 24px; border-radius: 8px; text-align: center; position: relative;">
+             <input type="file" id="pFile" accept="image/*" style="position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; height:100%;" />
+             <span class="muted" style="font-size:1.1rem;">📸 Clique para escolher</span>
+             ${previewHtml}
+          </div>
+        </div>
+        <div class="form-actions" style="margin-top:24px;">
+          <button type="submit" class="btn btn-primary" id="btnSubmit">Salvar Produto</button>
+          <button type="button" class="btn btn-outline" onclick="window.navigate('admin', {tab:'products'})">Cancelar</button>
+        </div>
+      </form>
+    </div>`;
+
+  let base64Image = ed ? ed.image : '';
+  $('#pFile').addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) return toast('Máximo 2MB', 'error');
+    const reader = new FileReader();
+    reader.onload = (ev) => { base64Image = ev.target.result; $('#imgPreview').src = base64Image; $('#imgPreview').style.display = 'block'; };
+    reader.readAsDataURL(file);
+  });
+
+  $('#productForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = $('#btnSubmit'); btn.textContent = 'Salvando...'; btn.disabled = true;
+    const data = { 
+      name: $('#pName').value.trim(), 
+      price: Number($('#pPrice').value), 
+      stock: Number($('#pStock').value),
+      category: $('#pCategory').value.trim(),
+      description: $('#pDesc').value.trim(), 
+      image: base64Image 
+    };
+    try {
+      if (ed) await store.updateProduct(ed.id, data); else await store.addProduct(data);
+      toast('Salvo!', 'success'); navigate('admin', {tab:'products'});
+    } catch (err) { toast('Erro ao salvar.', 'error'); console.error(err); btn.disabled = false; btn.textContent = 'Salvar Produto'; }
+  });
+}
+
+/* ------------------------------ LOGIN / REGISTRO ---------------------- */
+function renderLogin() {
+  appEl().innerHTML = `<div class="card"><h2>Entrar</h2><div id="msg"></div><form id="form"><div class="form-group"><label>E-mail</label><input type="email" id="email" required></div><div class="form-group"><label>Senha</label><input type="password" id="pass" required></div><button type="submit" class="btn btn-primary">Entrar</button></form><p class="muted mt-4" style="text-align:center"><a href="#" id="goReg">Cadastre-se</a></p></div>`;
+  $('#goReg').onclick = (e) => { e.preventDefault(); navigate('register'); };
+  $('#form').onsubmit = async (e) => { 
+    e.preventDefault(); 
+    try { await signInWithEmailAndPassword(auth, $('#email').value, $('#pass').value); } 
+    catch (err) { $('#msg').innerHTML = `<div class="alert alert-error">${err.message}</div>`; } 
+  };
+}
+
+function renderRegister() {
+  appEl().innerHTML = `<div class="card"><h2>Criar conta</h2><div id="msg"></div><form id="form"><div class="form-group"><label>Nome</label><input type="text" id="name" required></div><div class="form-group"><label>E-mail</label><input type="email" id="email" required></div><div class="form-group"><label>Senha (min. 6 chars)</label><input type="password" id="pass" required minlength="6"></div><button type="submit" class="btn btn-primary">Cadastrar</button></form></div>`;
+  $('#form').onsubmit = async (e) => { 
+    e.preventDefault(); 
+    try { 
+      const c = await createUserWithEmailAndPassword(auth, $('#email').value, $('#pass').value); 
+      await store.saveCustomerProfile(c.user, {name: $('#name').value}); 
+      toast('Conta criada!', 'success'); navigate('home'); 
+    } catch (err) { $('#msg').innerHTML = `<div class="alert alert-error">${err.message}</div>`; } 
+  };
+}
+
+/* ------------------------------ CONTA E HISTÓRICO --------------------- */
+async function renderAccount() {
+  if (!state.user) return navigate('login'); 
+  const p = await store.getCustomerProfile(state.user.uid); 
+  const myOrders = await store.getMyOrders(state.user.uid);
+  
+  const ordersHtml = myOrders.length ? myOrders.map(o => {
+    let statusColor = o.status === 'paid' ? 'var(--success)' : o.status === 'canceled' ? 'var(--danger)' : o.status === 'shipped' ? 'var(--primary)' : 'var(--text-muted)';
+    let statusText = o.status === 'paid' ? '✅ Pago' : o.status === 'canceled' ? '❌ Cancelado' : o.status === 'shipped' ? '📦 Enviado' : '⏳ Pendente';
+    
+    return `
+      <div style="background:var(--bg-elev); border:1px solid var(--border); border-radius:8px; padding:16px; margin-bottom:12px;">
+        <div class="flex-between" style="margin-bottom:8px;">
+          <strong style="font-family:monospace; font-size:0.85rem;">Pedido #${o.id.slice(0,6).toUpperCase()}</strong>
+          <span style="color:${statusColor}; font-weight:600; font-size:0.85rem;">${statusText}</span>
+        </div>
+        <p class="muted" style="font-size:0.8rem; margin-bottom:12px;">Data: ${formatDate(o.createdAt)} | CPF: ${escapeHtml(o.cpf || 'Não informado')}</p>
+        <div style="border-top:1px solid var(--border); padding-top:8px;">
+          ${o.items.map(i => `<div class="flex-between" style="font-size:0.85rem; margin-bottom:4px;"><span>${i.qty}x ${escapeHtml(i.name)}</span> <span>${brl(i.price * i.qty)}</span></div>`).join('')}
+        </div>
+        <div class="flex-between mt-4" style="border-top:1px solid var(--border); padding-top:8px; font-weight:700;">
+          <span>Total</span>
+          <span style="color:var(--primary);">${brl(o.total)}</span>
+        </div>
+      </div>
+    `;
+  }).join('') : `<p class="muted">Você ainda não fez nenhum pedido.</p>`;
+
+  appEl().innerHTML = `
+    <div class="card wide" style="max-width:800px;">
+      <div style="display:flex; gap:24px; flex-wrap:wrap;">
+        <div style="flex:1; min-width:300px;">
+          <h2 style="margin-bottom:16px;">Minha Conta</h2>
+          <div class="form-group"><label>Nome</label><input type="text" value="${p?.name || ''}" disabled /></div>
+          <div class="form-group"><label>E-mail</label><input type="text" value="${state.user.email}" disabled /></div>
+          <div class="form-group"><label>Tipo</label><input type="text" value="${state.isAdmin ? 'Vendedor' : 'Cliente'}" disabled /></div>
+        </div>
+        <div style="flex:1; min-width:300px;">
+          <h2 style="margin-bottom:16px;">Meus Pedidos</h2>
+          <div style="max-height:400px; overflow-y:auto; padding-right:8px;">
+            ${ordersHtml}
+          </div>
+        </div>
+      </div>
+    </div>`; 
+}
+
+/* ------------------------------ CARRINHO ------------------------------ */
+function renderCart() {
+  if (!state.user) return navigate('login'); 
+  const items = Object.entries(state.cart); 
+  if (!items.length) return appEl().innerHTML = `<div class="empty-state"><h3>Seu carrinho está vazio</h3><button class="btn btn-primary mt-4" onclick="window.navigate('home')">Voltar às compras</button></div>`; 
+  
+  let total = 0; 
+  const html = items.map(([pid, i]) => { 
+    const p = state.products.find(x => x.id === pid); 
+    if(!p) return ''; 
+    total += p.price * i.qty; 
+    return `<div class="cart-item">
+      <div class="info">
+        <div class="name">${p.name}</div>
+        <div class="price">${brl(p.price)}</div>
+      </div>
+      <div class="qty">
+        <button data-dec="${pid}">-</button>
+        <span>${i.qty}</span>
+        <button data-inc="${pid}">+</button>
+      </div>
+    </div>`; 
+  }).join(''); 
+  
+  appEl().innerHTML = `<h2 class="section-title">Carrinho</h2><div class="cart-list">${html}</div><div class="cart-summary mt-4"><div class="total">${brl(total)}</div><button class="btn btn-primary" onclick="window.navigate('checkout')">Ir para o Checkout</button></div>`; 
+  
+  appEl().querySelectorAll('[data-inc]').forEach(b => b.onclick = async () => { const id = b.dataset.inc; await store.setQty(state.user.uid, id, state.cart[id].qty + 1); }); 
+  appEl().querySelectorAll('[data-dec]').forEach(b => b.onclick = async () => { const id = b.dataset.dec; await store.setQty(state.user.uid, id, state.cart[id].qty - 1); }); 
+}
+
+/* ------------------------------ CHECKOUT ------------------------------ */
+function renderCheckout() {
+  if (!state.user) return navigate('login'); 
+  const items = Object.entries(state.cart).map(([pid, i]) => { const p = state.products.find(x => x.id === pid); return { productId: pid, name: p.name, price: p.price, qty: i.qty }; });
+  const total = items.reduce((acc, curr) => acc + (curr.price * curr.qty), 0);
+
+  appEl().innerHTML = `
+    <div class="card wide" style="max-width:800px;">
+      <h2>Finalizar Compra</h2>
+      
+      <div style="display:flex; gap:24px; flex-wrap:wrap; margin-top:24px;">
+        <div style="flex:1; min-width:280px;">
+          <h3 class="mb-4">Seus Dados</h3>
+          <div class="form-group">
+            <label>CPF (Opcional)</label>
+            <input type="text" id="cpf" placeholder="000.000.000-00" maxlength="14" autocomplete="off" />
+          </div>
+          <p class="muted" style="font-size:0.8rem;">Utilizado apenas para emissão da nota fiscal.</p>
+        </div>
+
+        <div style="flex:1; min-width:280px;">
+          <h3 class="mb-4">Pagamento</h3>
+          <div class="pix-box" style="margin-top:0;">
+            <span class="label">Chave PIX</span>
+            00020126580014BR.GOV.BCB.PIX0136chave-pix-de-teste-123456789
+          </div>
+          <p class="muted" style="font-size:0.8rem;">O vendedor aprovará seu pedido após a confirmação do PIX.</p>
+        </div>
+      </div>
+
+      <div style="background:var(--bg-elev-2); padding:20px; border-radius:8px; margin-top:24px;">
+        <h3 class="mb-4">Resumo do Pedido</h3>
+        ${items.map(i => `<div class="flex-between" style="font-size:0.9rem; margin-bottom:8px;"><span>${i.qty}x ${escapeHtml(i.name)}</span> <span>${brl(i.price * i.qty)}</span></div>`).join('')}
+        <div class="flex-between mt-4" style="border-top:1px solid var(--border-strong); padding-top:12px; font-size:1.2rem; font-weight:800;">
+          <span>Total</span>
+          <span style="color:var(--primary);">${brl(total)}</span>
+        </div>
+      </div>
+
+      <div class="form-actions mt-4">
+        <button class="btn btn-outline" onclick="window.navigate('cart')">Voltar</button>
+        <button class="btn btn-primary" id="btnFinish" style="flex:2;">Confirmar Pedido</button>
+      </div>
+    </div>`;
+
+  $('#cpf').addEventListener('input', (e) => {
+    e.target.value = maskCPF(e.target.value);
+  });
+
+  $('#btnFinish').onclick = async () => {
+    const btn = $('#btnFinish'); btn.textContent = 'Processando...'; btn.disabled = true;
+    try {
+      const profile = await store.getCustomerProfile(state.user.uid);
+      const cpfValue = $('#cpf').value.trim();
+      
+      await store.createOrder(state.user.uid, profile?.name || 'Cliente', items, total, 'PIX', cpfValue);
+      await store.clearCart(state.user.uid);
+      toast('Pedido realizado com sucesso!', 'success');
+      navigate('account'); 
+    } catch (err) {
+      toast('Erro ao processar pedido.', 'error'); console.error(err);
+      btn.textContent = 'Confirmar Pedido'; btn.disabled = false;
+    }
+  };
+}
+
+/* ------------------------------ BOOTSTRAP ----------------------------- */
+onAuthStateChanged(auth, async (user) => {
+  state.user = user;
+  if (user) {
+    state.isOwner = (user.email === ADMIN_EMAIL);
+    
+    if (state.unsubVendedores) state.unsubVendedores();
+    state.unsubVendedores = store.listenVendedores((v) => {
+      state.vendedores = v;
+      state.isAdmin = state.isOwner || (v[user.email.replace(/\./g, ',')] !== undefined);
+      if (state.route === 'admin') renderAdmin(state.params.tab || 'dashboard');
+      renderHeader();
+    });
+    
+    if (state.unsubCart) state.unsubCart();
+    state.unsubCart = store.listenCart(user.uid, (c) => { state.cart = c; renderHeader(); });
+    
+    await store.saveCustomerProfile(user);
+  } else {
+    state.isAdmin = false; state.cart = {}; state.vendedores = {};
+    if (state.unsubCart) state.unsubCart();
+    if (state.unsubVendedores) state.unsubVendedores();
+    renderHeader();
+  }
+  if (state.route === 'home') renderHome(); else navigate(state.route, state.params);
+});
+
+if (state.unsubProducts) state.unsubProducts();
+state.unsubProducts = store.listenProducts((list) => {
+  state.products = list;
+  if (state.route === 'home') renderHome();
+  else if (state.route === 'admin' && state.params.tab === 'dashboard') renderAdmin('dashboard');
+});
+
+document.getElementById('year').textContent = new Date().getFullYear();
+navigate('home');
