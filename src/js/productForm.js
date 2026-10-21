@@ -85,4 +85,4 @@ export function renderProductForm(state, id) {
       toast('Salvo!', 'success'); window.navigate('admin', {tab:'products'});
     } catch (err) { toast('Erro.', 'error'); btn.disabled = false; btn.textContent = 'Salvar'; }
   };
-}
+}   
