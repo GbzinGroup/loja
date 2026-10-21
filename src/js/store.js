@@ -39,7 +39,17 @@ export const store = {
   // CUPONS
   listenCoupons(cb) { return onValue(ref(db, 'coupons'), (s) => cb(s.val() || {})); },
   async addCoupon(code, discount, type) { 
-    await set(ref(db, `coupons/${code.toUpperCase()}`), { code: code.toUpperCase(), discount: Number(discount), type, active: true }); 
+    const normalized = String(code || '').trim().toUpperCase();
+    if (!/^[A-Z0-9_-]{3,50}$/.test(normalized)) throw new Error('Use um código de 3 a 50 caracteres: letras, números, hífen ou underline.');
+    if (!Number.isFinite(Number(discount)) || Number(discount) <= 0) throw new Error('O desconto precisa ser maior que zero.');
+    if (!['fixed', 'percent'].includes(type)) throw new Error('Tipo de desconto inválido.');
+    if (type === 'percent' && Number(discount) > 100) throw new Error('O desconto percentual não pode passar de 100%.');
+    await set(ref(db, `coupons/${normalized}`), { code: normalized, discount: Number(discount), type, active: true, showInAccount: false }); 
+  },
+  async setCouponAccountVisibility(code, visible) {
+    const normalized = String(code || '').trim().toUpperCase();
+    if (!normalized) throw new Error('Código de cupom inválido.');
+    await update(ref(db, `coupons/${normalized}`), { showInAccount: Boolean(visible) });
   },
   async removeCoupon(code) {
     await remove(ref(db, `coupons/${code.toUpperCase()}`));
@@ -53,16 +63,24 @@ export const store = {
 
   // PEDIDOS
   async createOrder(uid, name, items, total, method, cpf, extras, coupon, isGift, giftTo) {
-    const orderRef = doc(collection(firestore, 'orders'));
-    await setDoc(orderRef, { userId: uid, customerName: name, items, total, paymentMethod: method, cpf: cpf || 'N/I', extras: extras || [], coupon: coupon || null, isGift: isGift || false, giftTo: giftTo || null, status: 'pending', createdAt: serverTimestamp() });
+    if (!uid) throw new Error('Faça login para finalizar o pedido.');
+    if (!Array.isArray(items) || !items.length) throw new Error('O carrinho está vazio.');
+    if (!Number.isFinite(Number(total)) || Number(total) < 0) throw new Error('Total do pedido inválido.');
+    // Verificação preliminar de estoque; as regras do Firebase também devem estar ativas.
     for (const item of items) {
-      const pRef = ref(db, `products/${item.productId}`);
-      const pSnap = await get(pRef);
-      if (pSnap.exists()) {
-        const p = pSnap.val();
-        await update(pRef, { stock: Math.max(0, (p.stock || 0) - item.qty), salesCount: (p.salesCount || 0) + item.qty });
+      if (!item?.productId || !Number.isInteger(Number(item.qty)) || Number(item.qty) < 1) throw new Error('Item do pedido inválido.');
+      const productSnap = await get(ref(db, `products/${item.productId}`));
+      if (!productSnap.exists()) throw new Error(`O produto "${item.name || item.productId}" não está mais disponível.`);
+      const product = productSnap.val();
+      if (product.active === false || Number(product.stock || 0) < Number(item.qty)) {
+        throw new Error(`Estoque insuficiente para "${item.name || product.name || 'produto'}".`);
       }
     }
+    const orderRef = doc(collection(firestore, 'orders'));
+    await setDoc(orderRef, { userId: uid, customerName: name, items, total, paymentMethod: method, cpf: cpf || 'N/I', extras: extras || [], coupon: coupon || null, isGift: isGift || false, giftTo: giftTo || null, status: 'pending', createdAt: serverTimestamp() });
+    // Não altere estoque pelo navegador: as regras do RTDB permitem escrita em
+    // products somente para administradores. A baixa de estoque deve ser feita
+    // por uma Cloud Function confiável após validar preço/estoque no servidor.
     return orderRef.id;
   },
   async getMyOrders(uid) {
@@ -75,7 +93,7 @@ export const store = {
     const snap = await getDocs(collection(firestore, 'orders'));
     return snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => (b.createdAt?.toMillis()||0) - (a.createdAt?.toMillis()||0));
   },
-  async updateOrderStatus(orderId, status) { await setDoc(doc(firestore, 'orders', orderId), { status }, { merge: true }); },
+  async updateOrderStatus(orderId, status) { const allowed = ['pending', 'paid', 'shipped', 'canceled', 'completed']; if (!allowed.includes(status)) throw new Error('Status de pedido inválido.'); await setDoc(doc(firestore, 'orders', orderId), { status }, { merge: true }); },
 
   // CLIENTES E REVIEWS
   async saveCustomerProfile(user, extra = {}) {
