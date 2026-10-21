@@ -1,6 +1,5 @@
-import { firestore, db } from './firebase-config.js';
+import { firestore } from './firebase-config.js';
 import { collection, doc, setDoc, getDocs, query, where, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
-import { ref, get, update } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
 import { getAuth } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 
 export async function createOrder({ items, total, paymentMethod }) {
@@ -17,18 +16,8 @@ export async function createOrder({ items, total, paymentMethod }) {
     createdAt: serverTimestamp()
   });
 
-  // Baixa o estoque no RTDB
-  for (const item of items) {
-    const pRef = ref(db, `products/${item.productId}`);
-    const snap = await get(pRef);
-    if (snap.exists()) {
-      const p = snap.val();
-      await update(pRef, { 
-        stock: Math.max(0, (p.stock || 0) - item.qty), 
-        salesCount: (p.salesCount || 0) + item.qty 
-      });
-    }
-  }
+  // O estoque não é alterado no navegador: as regras permitem escrita em
+  // products somente para administradores. Use uma Cloud Function para baixa segura.
   return orderRef.id;
 }
 
@@ -52,5 +41,7 @@ export async function getAllOrders() {
 }
 
 export async function updateOrderStatus(orderId, newStatus) {
+  const allowed = ['pending', 'paid', 'shipped', 'canceled', 'completed'];
+  if (!allowed.includes(newStatus)) throw new Error('Status de pedido inválido.');
   await setDoc(doc(firestore, 'orders', orderId), { status: newStatus }, { merge: true });
 }
