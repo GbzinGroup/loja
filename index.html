@@ -14,9 +14,18 @@
   <main id="app" class="app" aria-live="polite"></main>
   
   <footer class="footer">
-    <p>&copy; <span id="year"></span> Gbzin Shop — Todos os direitos reservados.</p>
+    <div class="footer-inner"><div><strong>Gbzin Shop</strong><p>Uma experiência digital simples e segura.</p></div><div class="footer-links"><button onclick="window.navigate('about')">Sobre</button><button onclick="window.navigate('faq')">Perguntas frequentes</button><button onclick="window.navigate('contact')">Contato</button><button onclick="window.navigate('shipping')">Entrega</button><button onclick="window.navigate('privacy')">Privacidade</button><button onclick="window.navigate('terms')">Termos</button></div><p class="copyright">&copy; <span id="year"></span> Gbzin Shop — Todos os direitos reservados.</p></div>
   </footer>
 
+  <script>
+    // Mostra uma mensagem útil caso o módulo principal não consiga iniciar.
+    window.addEventListener('error', function (event) {
+      console.error('[Gbzin Shop]', event.error || event.message);
+    });
+    window.addEventListener('unhandledrejection', function (event) {
+      console.error('[Gbzin Shop] Falha assíncrona:', event.reason);
+    });
+  </script>
   <script type="module" src="src/js/main.js"></script>
 </body>
 </html>
