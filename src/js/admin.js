@@ -100,18 +100,19 @@ export async function renderAdmin(state, tab = 'dashboard') {
       <h3 class="mb-4">Cupons Ativos</h3>
       <div class="table-wrap">
         <table class="data-table">
-          <thead><tr><th>Código</th><th>Desconto</th><th>Tipo</th><th class="text-right">Ações</th></tr></thead>
+          <thead><tr><th>Código</th><th>Desconto</th><th>Tipo</th><th>Visibilidade na conta</th><th class="text-right">Ações</th></tr></thead>
           <tbody>
             ${coupons.length ? coupons.map(c => `
               <tr>
                 <td><strong style="color: var(--primary); font-size: 1rem;">${c.code}</strong></td>
                 <td>${c.type === 'percent' ? `${c.discount}%` : brl(c.discount)}</td>
                 <td>${c.type === 'percent' ? 'Porcentagem' : 'Valor Fixo'}</td>
+                <td><label class="switch" title="Mostrar este cupom na conta dos clientes"><input type="checkbox" ${c.showInAccount === true ? 'checked' : ''} onchange="window.toggleCouponVisibility('${c.code}', this.checked)"><span class="slider"></span></label><small class="muted" style="display:block">${c.showInAccount === true ? 'Visível' : 'Oculto'}</small></td>
                 <td class="text-right">
                   <button class="btn btn-danger" onclick="window.deleteCoupon('${c.code}')">Excluir</button>
                 </td>
               </tr>`).join('') 
-            : '<tr><td colspan="4" class="muted text-center" style="padding: 20px;">Nenhum cupom ativo no momento.</td></tr>'}
+            : '<tr><td colspan="5" class="muted text-center" style="padding: 20px;">Nenhum cupom ativo no momento.</td></tr>'}
           </tbody>
         </table>
       </div>
@@ -171,5 +172,16 @@ window.deleteCoupon = async (code) => {
     await store.removeCoupon(code);
     toast('Cupom removido.', 'success');
     window.navigate('admin', {tab: 'coupons'});
+  }
+};
+window.toggleCouponVisibility = async (code, visible) => {
+  try {
+    await store.setCouponAccountVisibility(code, visible);
+    toast(visible ? 'Cupom visível na conta dos clientes.' : 'Cupom ocultado da conta dos clientes.', 'success');
+    window.navigate('admin', { tab: 'coupons' });
+  } catch (err) {
+    console.error('Erro ao alterar visibilidade do cupom:', err);
+    toast(err?.message || 'Não foi possível alterar a visibilidade.', 'error');
+    window.navigate('admin', { tab: 'coupons' });
   }
 };
