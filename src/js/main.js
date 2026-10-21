@@ -18,7 +18,7 @@ import { renderProductForm } from './productForm.js';
 import { renderAccount } from './account.js';
 
 // Importação do gerador de QR Code (CDN)
-import { toDataURL } from 'https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js';
+import { toDataURL } from 'https://esm.sh/qrcode@1.5.3';
 
 // LISTA DE ADMINS
 const ADMINS = [
@@ -54,6 +54,12 @@ function renderHeader() {
   headerEl().innerHTML = `
     <div class="header-inner">
       <div class="logo" onclick="window.navigate('home')">${escapeHtml(state.settings.storeName)}</div>
+      <nav class="main-nav" aria-label="Navegação principal">
+        <button onclick="window.navigate('home')">Loja</button>
+        <button onclick="window.navigate('new')">Novidades</button>
+        <button onclick="window.navigate('tracking')">Meus pedidos</button>
+        <button onclick="window.navigate('faq')">Ajuda</button>
+      </nav>
       <div class="header-actions">
         <button class="btn btn-icon btn-outline" onclick="window.navigate('support')" title="Suporte">🎧</button>
         <button class="btn btn-icon btn-outline" onclick="window.navigate('favorites')" title="Favoritos">❤️</button>
@@ -85,13 +91,21 @@ function navigate(route, params = {}) {
     case 'checkout': return renderCheckout();
     case 'product-details': return renderProductDetails(params.id);
     case 'maintenance': return renderMaintenance();
+    case 'about': return renderInfoPage('about');
+    case 'faq': return renderInfoPage('faq');
+    case 'contact': return renderInfoPage('contact');
+    case 'shipping': return renderInfoPage('shipping');
+    case 'privacy': return renderInfoPage('privacy');
+    case 'terms': return renderInfoPage('terms');
+    case 'tracking': return renderTracking();
+    case 'new': return renderInfoPage('new');
     default: return renderHome();
   }
 }
 window.navigate = navigate;
 
 /* ------------------------------ AÇÕES GLOBAIS ------------------------ */
-window.signOutUser = async () => { await signOut(auth); toast('Saiu.', 'success'); };
+window.signOutUser = async () => { try { await signOut(auth); toast('Sessão encerrada.', 'success'); navigate('home'); } catch (e) { console.error(e); toast('Não foi possível sair. Tente novamente.', 'error'); } };
 
 document.addEventListener('setProfileTab', (e) => {
   state.profileTab = e.detail;
@@ -105,15 +119,28 @@ window.toggleFav = async (pid, isFav) => {
 
 window.addCart = async (pid) => {
   if (!state.user) return navigate('login');
+  const product = state.products.find(p => p.id === pid && p.active !== false);
+  if (!product) return toast('Este produto não está disponível.', 'error');
   const itemRef = state.cart[pid];
-  await store.updateCart(state.user.uid, { ...state.cart, [pid]: { qty: (itemRef?.qty || 0) + 1 } });
-  toast('Adicionado!', 'success');
+  const nextQty = (Number(itemRef?.qty) || 0) + 1;
+  if (nextQty > Number(product.stock || 0)) return toast('Quantidade maior que o estoque disponível.', 'error');
+  try {
+    await store.updateCart(state.user.uid, { ...state.cart, [pid]: { qty: nextQty } });
+    toast('Adicionado ao carrinho!', 'success');
+  } catch (e) { console.error(e); toast('Não foi possível atualizar o carrinho.', 'error'); }
 };
 
 window.updateCartQty = async (pid, qty) => {
+  if (!state.user) return navigate('login');
+  const product = state.products.find(p => p.id === pid);
   const newCart = { ...state.cart };
-  if (qty <= 0) delete newCart[pid]; else newCart[pid] = { qty };
-  await store.updateCart(state.user.uid, newCart);
+  if (qty <= 0) delete newCart[pid];
+  else {
+    if (!product || qty > Number(product.stock || 0)) return toast('Quantidade indisponível no estoque.', 'error');
+    newCart[pid] = { qty: Math.floor(Number(qty)) };
+  }
+  try { await store.updateCart(state.user.uid, newCart); }
+  catch (e) { console.error(e); toast('Não foi possível atualizar o carrinho.', 'error'); }
 };
 
 /* ------------------------------ TELAS BÁSICAS ------------------------- */
@@ -125,44 +152,100 @@ function renderMaintenance() {
 function renderHome() {
   const list = state.products.filter(p => p.active !== false);
   const renderCard = (p, isFav) => `
-    <div class="product-card">
-      <div class="thumb" onclick="window.navigate('product-details', {id: '${p.id}'})">
-        ${p.image ? `<img src="${p.image}" />` : `<div class="placeholder">🛍️</div>`}
+    <article class="product-card">
+      <div class="thumb" role="button" tabindex="0" aria-label="Ver ${escapeHtml(p.name)}" onclick="window.navigate('product-details', {id: '${p.id}'})" onkeydown="if(event.key==='Enter')window.navigate('product-details',{id:'${p.id}'})">
+        ${p.image ? `<img loading="lazy" src="${escapeHtml(p.image)}" alt="${escapeHtml(p.name)}" onerror="this.style.display='none'"/>` : `<div class="placeholder">🛍️</div>`}
       </div>
-      <button class="fav-btn" onclick="window.toggleFav('${p.id}', ${isFav})">${isFav ? '❤️' : '🤍'}</button>
+      <button class="fav-btn" aria-label="${isFav ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}" onclick="window.toggleFav('${p.id}', ${Boolean(isFav)})">${isFav ? '❤️' : '🤍'}</button>
       <div class="info">
         <div class="category">${escapeHtml(p.category || 'Geral')}</div>
-        <div class="name">${escapeHtml(p.name)}</div>
-        <div class="price">${p.promoPrice > 0 ? `${brl(p.promoPrice)}` : brl(p.price)}</div>
+        <div class="name">${escapeHtml(p.name || 'Produto')}</div>
+        <div class="price">${Number(p.promoPrice) > 0 ? `${brl(p.promoPrice)} <small class="muted" style="text-decoration:line-through">${brl(p.price)}</small>` : brl(p.price)}</div>
+        <small class="muted">${Number(p.stock) > 0 ? `${Number(p.stock)} em estoque` : 'Estoque indisponível'}</small>
       </div>
-      <div class="actions"><button class="btn btn-primary" onclick="window.addCart('${p.id}')" ${p.stock <= 0 ? 'disabled' : ''}>${p.stock <= 0 ? 'Esgotado' : 'Comprar'}</button></div>
-    </div>`;
+      <div class="actions"><button class="btn btn-primary" onclick="window.addCart('${p.id}')" ${Number(p.stock) <= 0 ? 'disabled' : ''}>${Number(p.stock) <= 0 ? 'Esgotado' : 'Adicionar ao carrinho'}</button></div>
+    </article>`;
 
-  const best = [...list].sort((a, b) => (b.salesCount || 0) - (a.salesCount || 0)).slice(0, 4);
-  const news = list.slice(0, 4);
-  
+  const categories = [...new Set(list.map(p => p.category).filter(Boolean))].sort();
   appEl().innerHTML = `
-    <h2 class="section-title">🔥 Mais Vendidas</h2>
-    <div class="product-grid">${best.map(p => renderCard(p, state.favorites[p.id])).join('')}</div>
-    <h2 class="section-title mt-8">✨ Novidades</h2>
-    <div class="product-grid">${news.map(p => renderCard(p, state.favorites[p.id])).join('')}</div>
-  `;
+    <section class="hero card" style="padding:clamp(22px,5vw,48px);margin-bottom:28px;background:radial-gradient(ellipse at top right,rgba(99,102,241,.22),transparent 55%),var(--bg-elev)">
+      <p class="muted" style="text-transform:uppercase;letter-spacing:.14em;font-weight:700">Bem-vindo à loja</p>
+      <h1 style="font-size:clamp(1.8rem,5vw,3rem);margin:8px 0 12px">${escapeHtml(state.settings.storeName || 'Gbzin Shop')}</h1>
+      <p class="muted" style="max-width:620px;font-size:1rem">Encontre seus itens favoritos com uma experiência simples, rápida e segura.</p>
+      <div class="flex gap-3 flex-wrap mt-6">
+        <button class="btn btn-primary" onclick="document.getElementById('catalogo')?.scrollIntoView({behavior:'smooth'})">Explorar produtos</button>
+        <button class="btn btn-outline" onclick="window.navigate('support')">Central de suporte</button>
+      </div>
+    </section>
+    <section id="catalogo">
+      <div class="flex-between flex-wrap gap-4 mb-4"><div><h2 class="section-title" style="margin-bottom:6px">Catálogo</h2><p class="muted">${list.length} produto(s) disponíveis</p></div></div>
+      <div class="catalog-tools flex gap-3 flex-wrap mb-6">
+        <input id="productSearch" type="search" placeholder="Buscar por nome ou descrição..." aria-label="Buscar produtos" style="flex:2;min-width:220px;padding:12px 14px;border-radius:10px;border:1px solid var(--border-strong);background:var(--bg-elev);color:var(--text)">
+        <select id="categoryFilter" aria-label="Filtrar categoria" style="flex:1;min-width:160px;padding:12px;border-radius:10px;border:1px solid var(--border-strong);background:var(--bg-elev);color:var(--text)">
+          <option value="">Todas as categorias</option>${categories.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('')}
+        </select>
+        <select id="sortProducts" aria-label="Ordenar produtos" style="flex:1;min-width:150px;padding:12px;border-radius:10px;border:1px solid var(--border-strong);background:var(--bg-elev);color:var(--text)">
+          <option value="featured">Em destaque</option><option value="price-asc">Menor preço</option><option value="price-desc">Maior preço</option><option value="name">Nome A–Z</option>
+        </select>
+      </div>
+      <div id="catalogResults" class="product-grid">${list.map(p=>renderCard(p,state.favorites[p.id])).join('')}</div>
+      ${list.length ? '' : '<div class="empty-state"><h3>A loja está sendo preparada</h3><p class="muted">Novos produtos aparecerão aqui em breve.</p></div>'}
+    </section>`;
+  const updateCatalog = () => {
+    const term = ($('#productSearch')?.value || '').trim().toLocaleLowerCase('pt-BR');
+    const category = $('#categoryFilter')?.value || '';
+    const sort = $('#sortProducts')?.value || 'featured';
+    let filtered = list.filter(p => `${p.name || ''} ${p.description || ''} ${p.category || ''}`.toLocaleLowerCase('pt-BR').includes(term) && (!category || p.category === category));
+    if (sort === 'price-asc') filtered.sort((a,b)=>(Number(a.promoPrice)||Number(a.price)||0)-(Number(b.promoPrice)||Number(b.price)||0));
+    if (sort === 'price-desc') filtered.sort((a,b)=>(Number(b.promoPrice)||Number(b.price)||0)-(Number(a.promoPrice)||Number(a.price)||0));
+    if (sort === 'name') filtered.sort((a,b)=>(a.name||'').localeCompare(b.name||'', 'pt-BR'));
+    $('#catalogResults').innerHTML = filtered.length ? filtered.map(p=>renderCard(p,state.favorites[p.id])).join('') : '<div class="empty-state" style="grid-column:1/-1"><h3>Nenhum produto encontrado</h3><p class="muted">Tente mudar a busca ou os filtros.</p><button class="btn btn-outline mt-4" id="clearFilters">Limpar filtros</button></div>';
+    $('#clearFilters')?.addEventListener('click',()=>{ $('#productSearch').value=''; $('#categoryFilter').value=''; $('#sortProducts').value='featured'; updateCatalog(); });
+  };
+  $('#productSearch').addEventListener('input', updateCatalog);
+  $('#categoryFilter').addEventListener('change', updateCatalog);
+  $('#sortProducts').addEventListener('change', updateCatalog);
+}
+
+function renderInfoPage(page) {
+  const pages = {
+    about: { title: 'Sobre a Gbzin Shop', intro: 'Uma experiência de compra digital simples, transparente e pensada para a comunidade.', body: `<div class="feature-grid"><article class="feature-card"><span>⚡</span><h3>Compra simples</h3><p>Encontre o que procura com busca, categorias e detalhes claros.</p></article><article class="feature-card"><span>🔒</span><h3>Conta pessoal</h3><p>Acompanhe seus pedidos e mantenha suas informações em um só lugar.</p></article><article class="feature-card"><span>💬</span><h3>Suporte</h3><p>Precisa de ajuda? Acesse nossa central de atendimento.</p></article></div>` },
+    new: { title: 'Novidades e destaques', intro: 'Confira os itens disponíveis e descubra o que chegou recentemente.', body: `<div class="product-grid">${state.products.filter(p=>p.active!==false).slice(0,8).map(p=>`<article class="product-card"><div class="thumb" onclick="window.navigate('product-details',{id:'${p.id}'})">${p.image?`<img loading="lazy" src="${escapeHtml(p.image)}" alt="${escapeHtml(p.name)}" onerror="this.style.display='none'">`:'<div class="placeholder">✦</div>'}</div><div class="info"><div class="category">${escapeHtml(p.category||'Destaque')}</div><div class="name">${escapeHtml(p.name||'Produto')}</div><div class="price">${brl(Number(p.promoPrice)>0?p.promoPrice:p.price)}</div></div><div class="actions"><button class="btn btn-primary" onclick="window.navigate('product-details',{id:'${p.id}'})">Ver produto</button></div></article>`).join('')}</div>` },
+    faq: { title: 'Perguntas frequentes', intro: 'Respostas rápidas para ajudar você a comprar com tranquilidade.', body: `<div class="faq-list"><details><summary>Como faço uma compra?</summary><p>Escolha um produto, adicione ao carrinho, entre na sua conta e siga as etapas de finalização.</p></details><details><summary>Preciso criar uma conta?</summary><p>Sim. A conta permite associar seus pedidos ao seu perfil e consultar o histórico.</p></details><details><summary>Como acompanho meu pedido?</summary><p>Entre na sua conta e abra a área “Meus pedidos” para consultar o status disponível.</p></details><details><summary>Tenho um problema com a compra. O que faço?</summary><p>Abra a Central de suporte e descreva o ocorrido com o máximo de detalhes, sem compartilhar sua senha.</p></details><details><summary>Os produtos aparecem esgotados?</summary><p>O catálogo mostra a disponibilidade registrada pela loja. Se houver divergência, entre em contato com o suporte.</p></details></div>` },
+    contact: { title: 'Central de contato', intro: 'Fale com a equipe da Gbzin Shop.', body: `<div class="card contact-card"><h3>Como podemos ajudar?</h3><p class="muted">Informe sua dúvida, o número do pedido (se houver) e o e-mail da sua conta. Nunca envie senhas ou códigos de autenticação.</p><button class="btn btn-primary mt-4" onclick="window.navigate('support')">Abrir suporte</button><button class="btn btn-outline mt-4" onclick="window.navigate('account')">Ver minha conta</button></div>` },
+    shipping: { title: 'Entrega e disponibilização', intro: 'Informações sobre o acesso aos produtos comprados.', body: `<div class="policy-content"><h3>Produtos digitais</h3><p>A forma e o prazo de disponibilização dependem do produto e da confirmação do pedido. Consulte a descrição do item e o status na sua conta.</p><h3>Problemas de acesso</h3><p>Se o produto não estiver disponível após a confirmação, entre em contato com o suporte e informe o número do pedido.</p><h3>Disponibilidade</h3><p>O catálogo pode mudar conforme estoque e disponibilidade. A confirmação final depende da validação do pedido.</p></div>` },
+    privacy: { title: 'Política de privacidade', intro: 'Como os dados são utilizados nesta experiência de loja.', body: `<div class="policy-content"><h3>Dados da conta</h3><p>Os dados fornecidos são utilizados para autenticação, atendimento e associação de pedidos à conta.</p><h3>Armazenamento</h3><p>A loja utiliza serviços Firebase para autenticação e armazenamento. Configure as regras de segurança e permissões do projeto antes de operar em produção.</p><h3>Segurança</h3><p>Não compartilhe senhas, códigos de acesso ou informações de pagamento em mensagens de suporte.</p><h3>Solicitações</h3><p>Para dúvidas ou solicitações sobre seus dados, utilize a Central de suporte.</p></div>` },
+    terms: { title: 'Termos de uso', intro: 'Regras gerais para utilizar a Gbzin Shop.', body: `<div class="policy-content"><h3>Uso da plataforma</h3><p>Utilize a loja de forma lícita e forneça informações corretas ao realizar pedidos.</p><h3>Pedidos e pagamentos</h3><p>Um pedido pode permanecer pendente até a confirmação. A criação do pedido, por si só, não comprova pagamento.</p><h3>Disponibilidade e preços</h3><p>Produtos, preços e estoque podem ser atualizados. A confirmação depende da validação da loja.</p><h3>Suporte</h3><p>Em caso de dúvida, contate a equipe antes de repetir uma compra.</p></div>` }
+  };
+  const data = pages[page] || pages.about;
+  appEl().innerHTML = `<section class="page-hero"><div class="eyebrow">GBZIN SHOP / CENTRAL</div><h1>${data.title}</h1><p>${data.intro}</p></section><section class="info-page">${data.body}</section><div class="page-cta"><div><h3>Precisa de ajuda?</h3><p class="muted">Nossa central reúne orientações e acesso ao suporte.</p></div><button class="btn btn-primary" onclick="window.navigate('support')">Ir para o suporte</button></div>`;
+}
+
+async function renderTracking() {
+  if (!state.user) { appEl().innerHTML = `<div class="empty-state"><h2>Consulte seus pedidos</h2><p>Entre na sua conta para visualizar compras e status.</p><button class="btn btn-primary mt-4" onclick="window.navigate('login')">Entrar</button></div>`; return; }
+  appEl().innerHTML = `<section class="page-hero"><div class="eyebrow">ÁREA DO CLIENTE</div><h1>Meus pedidos</h1><p>Consulte o andamento das suas compras.</p></section><div class="card loading-card">Carregando seus pedidos…</div>`;
+  try {
+    const orders = await store.getMyOrders(state.user.uid);
+    if (state.route !== 'tracking') return;
+    const labels = {pending:'Aguardando confirmação',paid:'Pagamento confirmado',shipped:'Enviado / disponibilizado',completed:'Concluído',canceled:'Cancelado'};
+    appEl().innerHTML = `<section class="page-hero"><div class="eyebrow">ÁREA DO CLIENTE</div><h1>Meus pedidos</h1><p>Consulte o andamento das suas compras.</p></section>${orders.length ? `<div class="orders-list">${orders.map(o=>`<article class="order-card"><div><span class="order-id">Pedido #${escapeHtml(o.id.slice(0,8).toUpperCase())}</span><h3>${brl(o.total||0)}</h3><p class="muted">${o.createdAt?.toDate?o.createdAt.toDate().toLocaleString('pt-BR'):'Data em processamento'}</p></div><span class="status-pill status-${escapeHtml(o.status||'pending')}">${labels[o.status]||'Em análise'}</span><div class="order-items">${(o.items||[]).map(i=>`${escapeHtml(i.name||'Produto')} × ${Number(i.qty)||1}`).join(' · ')}</div></article>`).join('')}</div>` : `<div class="empty-state"><h3>Você ainda não tem pedidos</h3><p>Quando fizer uma compra, ela aparecerá aqui.</p><button class="btn btn-primary mt-4" onclick="window.navigate('home')">Explorar loja</button></div>`}`;
+  } catch (e) { console.error(e); appEl().innerHTML = `<div class="empty-state"><h3>Não foi possível carregar seus pedidos</h3><p>Verifique sua conexão e as regras do Firestore.</p><button class="btn btn-outline mt-4" onclick="window.navigate('tracking')">Tentar novamente</button></div>`; }
 }
 
 function renderProductDetails(id) {
-  const p = state.products.find(x => x.id === id);
+  const p = state.products.find(x => x.id === id && x.active !== false);
   if (!p) return navigate('home');
-  appEl().innerHTML = `<div class="card flex gap-6 flex-wrap" style="max-width: 900px; margin: 0 auto;"><div style="flex:1;"><img src="${p.image}" style="border-radius: 8px;"></div><div style="flex:1;"><h2>${p.name}</h2><p class="muted mt-2">${p.category}</p><h3 class="mt-4" style="color: var(--primary);">${brl(p.promoPrice || p.price)}</h3><p class="mt-4">${p.description}</p><button class="btn btn-primary mt-6" onclick="window.addCart('${p.id}')" style="width: 100%;">Adicionar ao Carrinho</button></div></div>`;
+  appEl().innerHTML = `<div class="card flex gap-6 flex-wrap" style="max-width:900px;margin:0 auto;padding:clamp(18px,4vw,32px)"><div style="flex:1;min-width:240px">${p.image ? `<img loading="lazy" src="${escapeHtml(p.image)}" alt="${escapeHtml(p.name)}" style="width:100%;border-radius:12px;object-fit:cover">` : '<div class="empty-state">🛍️</div>'}</div><div style="flex:1;min-width:240px"><button class="btn btn-outline mb-4" onclick="window.navigate('home')">← Voltar à loja</button><h2>${escapeHtml(p.name)}</h2><p class="muted mt-2">${escapeHtml(p.category || 'Geral')}</p><h3 class="mt-4" style="color:var(--primary)">${brl(p.promoPrice > 0 ? p.promoPrice : p.price)}</h3><p class="mt-4">${escapeHtml(p.description || 'Sem descrição disponível.').replace(/\\n/g,'<br>')}</p><p class="muted mt-4">${Number(p.stock)>0 ? `${Number(p.stock)} em estoque` : 'Produto esgotado'}</p><button class="btn btn-primary mt-6" onclick="window.addCart('${p.id}')" style="width:100%" ${Number(p.stock)<=0?'disabled':''}>${Number(p.stock)<=0?'Esgotado':'Adicionar ao carrinho'}</button></div></div>`;
 }
 
 function renderLogin() {
   appEl().innerHTML = `<div class="card card-wide" style="max-width: 400px;"><h2 class="text-center mb-6">Entrar</h2><form id="form"><div class="form-group"><label>E-mail</label><input type="email" id="email" required></div><div class="form-group"><label>Senha</label><input type="password" id="pass" required></div><button class="btn btn-primary mt-4" style="width:100%">Entrar</button></form><p class="muted text-center mt-4"><a href="#" onclick="window.navigate('register')">Cadastre-se</a></p></div>`;
-  $('#form').onsubmit = async (e) => { e.preventDefault(); try { await signInWithEmailAndPassword(auth, $('#email').value, $('#pass').value); } catch (err) { toast(err.message, 'error'); } };
+  $('#form').onsubmit = async (e) => { e.preventDefault(); try { await signInWithEmailAndPassword(auth, $('#email').value, $('#pass').value); } catch (err) { toast(err.code === 'auth/invalid-credential' ? 'E-mail ou senha incorretos.' : (err.message || 'Ocorreu um erro.'), 'error'); } };
 }
 
 function renderRegister() {
   appEl().innerHTML = `<div class="card card-wide" style="max-width: 400px;"><h2 class="text-center mb-6">Criar Conta</h2><form id="form"><div class="form-group"><label>Nome</label><input type="text" id="name" required></div><div class="form-group"><label>E-mail</label><input type="email" id="email" required></div><div class="form-group"><label>Senha</label><input type="password" id="pass" required minlength="6"></div><button class="btn btn-primary mt-4" style="width:100%">Cadastrar</button></form></div>`;
-  $('#form').onsubmit = async (e) => { e.preventDefault(); try { const c = await createUserWithEmailAndPassword(auth, $('#email').value, $('#pass').value); await store.saveCustomerProfile(c.user, {name: $('#name').value}); toast('Conta criada!', 'success'); navigate('home'); } catch (err) { toast(err.message, 'error'); } };
+  $('#form').onsubmit = async (e) => { e.preventDefault(); try { const c = await createUserWithEmailAndPassword(auth, $('#email').value, $('#pass').value); await store.saveCustomerProfile(c.user, {name: $('#name').value}); toast('Conta criada!', 'success'); navigate('home'); } catch (err) { toast(err.code === 'auth/invalid-credential' ? 'E-mail ou senha incorretos.' : (err.message || 'Ocorreu um erro.'), 'error'); } };
 }
 
 function renderCart() {
@@ -296,8 +379,9 @@ async function renderCheckout() {
       toast('Pedido feito com sucesso!', 'success'); 
       navigate('account');
     } catch (err) {
-      toast('Erro ao finalizar.', 'error'); 
-      btn.textContent = 'Confirmar Pedido'; btn.disabled = false;
+      console.error('Falha ao finalizar pedido:', err);
+      toast(err?.message || 'Não foi possível finalizar o pedido. Confira sua conexão e tente novamente.', 'error'); 
+      btn.textContent = 'Já realizei o Pagamento'; btn.disabled = false;
     }
   };
 }
@@ -310,8 +394,7 @@ state.unsubMaintenance = store.listenMaintenance((m) => {
   else if (!m && state.route === 'maintenance') navigate('home');
 });
 
-store.listenCoupons((c) => { state.coupons = c; });
-
+// Cupons exigem autenticação nas regras do Realtime Database.
 onAuthStateChanged(auth, async (user) => {
   state.user = user;
   if (user) {
@@ -324,13 +407,18 @@ onAuthStateChanged(auth, async (user) => {
 
     if (state.unsubFavs) state.unsubFavs();
     state.unsubFavs = store.listenFavorites(user.uid, (f) => { state.favorites = f; if (state.route === 'home') renderHome(); });
-    
+
+    if (state.unsubCoupons) state.unsubCoupons();
+    state.unsubCoupons = store.listenCoupons((c) => { state.coupons = c; });
+
     await store.saveCustomerProfile(user);
   } else {
     window.currentUserUid = null;
     state.isAdmin = false; state.cart = {}; state.favorites = {};
     if (state.unsubCart) state.unsubCart();
     if (state.unsubFavs) state.unsubFavs();
+    if (state.unsubCoupons) state.unsubCoupons();
+    state.coupons = {};
     renderHeader();
   }
 
