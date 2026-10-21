@@ -9,8 +9,9 @@ export async function renderAccount(state) {
   try {
     const profile = await store.getCustomerProfile(state.user.uid); 
     const myOrders = await store.getMyOrders(state.user.uid);
-    const allCoupons = Object.values(state.coupons || {}).filter(c => c.active);
-    const tab = state.profileTab || 'data';
+    const allCoupons = Object.values(state.coupons || {}).filter(c => c.active && c.showInAccount === true);
+    const requestedTab = state.profileTab || 'data';
+    const tab = requestedTab === 'coupons' && !allCoupons.length ? 'data' : requestedTab;
 
     const totalPaid = myOrders.filter(o => o.status === 'paid').reduce((s, o) => s + o.total, 0);
     const totalOrders = myOrders.length;
@@ -156,7 +157,7 @@ export async function renderAccount(state) {
           <button class="tab-btn ${tab === 'orders' ? 'active' : ''}" onclick="window.setTab('orders')">Pedidos</button>
           <button class="tab-btn ${tab === 'library' ? 'active' : ''}" onclick="window.setTab('library')">Biblioteca</button>
           <button class="tab-btn ${tab === 'favorites' ? 'active' : ''}" onclick="window.setTab('favorites')">Favoritos</button>
-          <button class="tab-btn ${tab === 'coupons' ? 'active' : ''}" onclick="window.setTab('coupons')">Cupons</button>
+          ${allCoupons.length ? `<button class="tab-btn ${tab === 'coupons' ? 'active' : ''}" onclick="window.setTab('coupons')">Cupons</button>` : ''}
         </div>
 
         <div>${content}</div>
