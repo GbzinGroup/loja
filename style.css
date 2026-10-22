@@ -835,3 +835,29 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary); }
 .header-actions .nav-icon{margin-right:5px}
 .header-actions .btn-icon .nav-icon{margin:0}
 @media(max-width:760px){.header-actions .label{display:none}.header-actions .nav-icon{margin:0}}
+
+/* Correção de layout após remoção de emojis: largura, alinhamento e ícones CSS */
+:root { --max: 1480px; }
+#app { width: min(100%, 1480px); max-width: 1480px; margin-inline: auto; }
+.header-inner, .footer-inner { width: min(100%, 1480px); max-width: 1480px; margin-inline: auto; }
+.product-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 245px), 1fr)); gap: clamp(14px, 1.5vw, 22px); }
+.product-card { min-width: 0; }
+.product-card .thumb { aspect-ratio: 1 / 1; }
+.catalog-tools { grid-template-columns: minmax(0, 2fr) minmax(180px, 1fr) minmax(170px, 1fr); }
+.icon-tools:before { content: ""; width: 12px; height: 12px; border: 1.7px solid currentColor; border-radius: 3px; box-shadow: inset 0 -3px 0 rgba(255,255,255,.12); }
+.icon-favorite:before { content: ""; width: 10px; height: 10px; border: 1.6px solid currentColor; border-radius: 2px; transform: rotate(45deg) scale(.8); }
+.icon-favorite:after { content: ""; position: absolute; width: 5px; height: 5px; border-left: 1.6px solid currentColor; border-bottom: 1.6px solid currentColor; left: 1px; top: 3px; }
+.icon-cart:after { content: ""; width: 3px; height: 3px; border-radius: 50%; background: currentColor; box-shadow: 8px 0 currentColor; position: absolute; bottom: 0; left: 3px; }
+@media (min-width: 1500px) {
+  #app { padding-top: 34px; }
+  .product-grid { grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
+}
+@media (max-width: 900px) {
+  .catalog-tools { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  #productSearch { grid-column: 1 / -1; }
+}
+@media (max-width: 560px) {
+  .catalog-tools { grid-template-columns: minmax(0, 1fr); }
+  #productSearch { grid-column: auto; }
+  .product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
