@@ -29,7 +29,7 @@ export async function renderAccount(state) {
               <div class="avatar">${initial}</div>
               <div>
                 <h3>${escapeHtml(userName)}</h3>
-                <p class="muted">${state.isAdmin ? 'Administrador' : 'Cliente VIP'}</p>
+                <p class="muted">${state.isAdmin ? 'Administrador' : 'Cliente'}</p>
               </div>
             </div>
             <div class="form-group">
@@ -60,7 +60,7 @@ export async function renderAccount(state) {
     else if (tab === 'orders') {
       content = myOrders.length ? myOrders.map(o => {
         let color = o.status === 'paid' ? 'var(--success)' : o.status === 'canceled' ? 'var(--danger)' : o.status === 'shipped' ? 'var(--primary)' : 'var(--warning)';
-        let text = o.status === 'paid' ? '✅ Pago' : o.status === 'canceled' ? '❌ Cancelado' : o.status === 'shipped' ? '📦 Enviado' : '⏳ Pendente';
+        let text = o.status === 'paid' ? ' Pago' : o.status === 'canceled' ? ' Cancelado' : o.status === 'shipped' ? ' Enviado' : '⏳ Pendente';
         
         return `
           <div class="card mb-4" style="border-left: 4px solid ${color};">
@@ -89,7 +89,7 @@ export async function renderAccount(state) {
           ${favs.map(f => `
           <div class="product-card card-hover">
             <div class="thumb" onclick="window.navigate('product-details', {id: '${f.id}'})">
-              ${f.image ? `<img src="${f.image}" />` : `<div class="placeholder">🛍️</div>`}
+              ${f.image ? `<img src="${f.image}" />` : `<div class="placeholder"></div>`}
             </div>
             <div class="info">
               <div class="name">${escapeHtml(f.name)}</div>
@@ -115,12 +115,12 @@ export async function renderAccount(state) {
         <div class="product-grid">
           ${libProds.map(p => `
           <div class="product-card" style="border-color: var(--success);">
-            <div class="thumb">${p.image ? `<img src="${p.image}" />` : `<div class="placeholder">🛍️</div>`}</div>
+            <div class="thumb">${p.image ? `<img src="${p.image}" />` : `<div class="placeholder"></div>`}</div>
             <div class="info">
               <div class="name">${escapeHtml(p.name)}</div>
               <div class="price" style="color: var(--success);">Adquirido</div>
             </div>
-            <div class="actions"><button class="btn btn-outline" onclick="alert('Download iniciado!')" style="width:100%;">📥 Baixar</button></div>
+            <div class="actions"><button class="btn btn-outline" onclick="alert('Download iniciado!')" style="width:100%;"> Baixar</button></div>
           </div>`).join('')}
         </div>` : `<div class="empty-state"><h3>Biblioteca Vazia</h3></div>`;
     }
@@ -146,7 +146,7 @@ export async function renderAccount(state) {
         
         <div class="account-header">
           <div>
-            <h2 style="font-size: 2rem; margin-bottom: 4px;">Olá, ${escapeHtml(userName.split(' ')[0])} 👋</h2>
+            <h2 style="font-size: 2rem; margin-bottom: 4px;">Olá, ${escapeHtml(userName.split(' ')[0])} </h2>
             <p class="muted">Gerencie seus dados, pedidos e favoritos.</p>
           </div>
           <button class="btn btn-outline" onclick="window.signOutUser()" style="color: var(--danger); border-color: var(--danger);">Sair da Conta</button>
