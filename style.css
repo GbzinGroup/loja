@@ -861,3 +861,21 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary); }
   #productSearch { grid-column: auto; }
   .product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* Ícones SVG consistentes: não dependem de fonte de emojis ou pseudo-elementos */
+.header-actions .nav-icon,
+.header-actions svg.nav-icon {
+  display: inline-block;
+  width: 17px;
+  height: 17px;
+  min-width: 17px;
+  flex: 0 0 17px;
+  vertical-align: middle;
+  overflow: visible;
+  color: currentColor;
+}
+.header-actions .btn-icon svg.nav-icon { margin: 0; }
+.header-actions .btn:not(.btn-icon) svg.nav-icon { margin-right: 6px; }
+@media (max-width: 760px) {
+  .header-actions .btn:not(.btn-icon) svg.nav-icon { margin-right: 0; }
+}
