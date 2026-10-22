@@ -18,12 +18,42 @@
   </footer>
 
   <script>
-    // Mostra uma mensagem útil caso o módulo principal não consiga iniciar.
-    window.addEventListener('error', function (event) {
-      console.error('[Gbzin Shop]', event.error || event.message);
-    });
-    window.addEventListener('unhandledrejection', function (event) {
-      console.error('[Gbzin Shop] Falha assíncrona:', event.reason);
+    function showStartupError(message) {
+      console.error("[Gbzin Shop]", message);
+      var app = document.getElementById("app");
+      if (!app) return;
+      var section = document.createElement("section");
+      section.style.cssText = "max-width:760px;margin:48px auto;padding:24px;border:1px solid #343844;border-radius:16px;background:#15171d;color:#f5f5f5;font-family:Inter,system-ui,sans-serif";
+      var title = document.createElement("h1");
+      title.textContent = "Não foi possível carregar a loja";
+      var text = document.createElement("p");
+      text.textContent = "O site encontrou um erro ao iniciar. Confira o Console do navegador (F12 → Console).";
+      var detail = document.createElement("p");
+      detail.style.cssText = "color:#b6bdca;font-size:13px;overflow-wrap:anywhere";
+      detail.textContent = "Detalhe: " + String(message || "Erro de carregamento");
+      var button = document.createElement("button");
+      button.textContent = "Tentar novamente";
+      button.addEventListener("click", function () { location.reload(); });
+      section.appendChild(title);
+      section.appendChild(text);
+      section.appendChild(detail);
+      section.appendChild(button);
+      app.textContent = "";
+      app.appendChild(section);
+    }
+    window.addEventListener("error", function (event) {
+      if (event.target && event.target !== window) {
+        showStartupError("Falha ao carregar arquivo: " + (event.target.src || event.target.href || "recurso externo"));
+      } else {
+        showStartupError(event.message || (event.error && event.error.message) || "Erro JavaScript");
+      }
+    }, true);
+    window.addEventListener("unhandledrejection", function (event) {
+      console.error("[Gbzin Shop] Falha assíncrona:", event.reason);
+      var app = document.getElementById("app");
+      if (app && !app.textContent.trim()) {
+        showStartupError(event.reason && event.reason.message ? event.reason.message : "Falha assíncrona ao iniciar");
+      }
     });
   </script>
   <script type="module" src="src/js/main.js"></script>
