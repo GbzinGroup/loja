@@ -1,6 +1,6 @@
 import { db, firestore } from './firebase-config.js';
 import { ref, push, set, update, remove, onValue, get } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
-import { collection, doc, setDoc, getDoc, getDocs, query as fsQuery, where, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import { collection, doc, setDoc, getDoc, getDocs, query as fsQuery, where, serverTimestamp, runTransaction } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 export const store = {
   // PRODUTOS
@@ -20,6 +20,8 @@ export const store = {
   async updateProduct(id, data) { await update(ref(db, `products/${id}`), data); },
   async toggleProductStatus(id, current) { await update(ref(db, `products/${id}`), { active: !current }); },
   async deleteProduct(id) { await remove(ref(db, `products/${id}`)); },
+  async saveProductDelivery(id, content) { if (!id) throw new Error('Produto inválido.'); const path = ref(db, `productDeliveries/${id}`); if (!String(content || '').trim()) await remove(path); else await set(path, { content: String(content).slice(0, 12000), updatedAt: Date.now() }); },
+  async getProductDelivery(id) { const snap = await get(ref(db, `productDeliveries/${id}`)); return snap.exists() ? snap.val() : null; },
 
   // CARRINHO E FAVORITOS
   listenCart(uid, cb) { if (!uid) return () => {}; return onValue(ref(db, `carts/${uid}`), (s) => cb(s.val() || {})); },
@@ -61,46 +63,48 @@ export const store = {
     } catch { return null; }
   },
 
-  // PEDIDOS
-  async createOrder(uid, name, items, total, method, cpf, extras, coupon, isGift, giftTo) {
-    if (!uid) throw new Error('Faça login para finalizar o pedido.');
-    if (!Array.isArray(items) || !items.length) throw new Error('O carrinho está vazio.');
-    if (!Number.isFinite(Number(total)) || Number(total) < 0) throw new Error('Total do pedido inválido.');
-    // Verificação preliminar de estoque; as regras do Firebase também devem estar ativas.
-    for (const item of items) {
-      if (!item?.productId || !Number.isInteger(Number(item.qty)) || Number(item.qty) < 1) throw new Error('Item do pedido inválido.');
-      const productSnap = await get(ref(db, `products/${item.productId}`));
-      if (!productSnap.exists()) throw new Error(`O produto "${item.name || item.productId}" não está mais disponível.`);
-      const product = productSnap.val();
-      if (product.active === false || Number(product.stock || 0) < Number(item.qty)) {
-        throw new Error(`Estoque insuficiente para "${item.name || product.name || 'produto'}".`);
-      }
-    }
-    const orderRef = doc(collection(firestore, 'orders'));
-    await setDoc(orderRef, { userId: uid, customerName: name, items, total, paymentMethod: method, cpf: cpf || 'N/I', extras: extras || [], coupon: coupon || null, isGift: isGift || false, giftTo: giftTo || null, status: 'pending', createdAt: serverTimestamp() });
-    // Não altere estoque pelo navegador: as regras do RTDB permitem escrita em
-    // products somente para administradores. A baixa de estoque deve ser feita
-    // por uma Cloud Function confiável após validar preço/estoque no servidor.
-    return orderRef.id;
-  },
+  // PEDIDOS — criação e confirmação de pagamento são feitas apenas pelo backend.
+  async createOrder() { throw new Error('Pedidos Pix devem ser criados pelo checkout seguro do servidor.'); },
   async getMyOrders(uid) {
     if (!uid) return [];
     const q = fsQuery(collection(firestore, 'orders'), where('userId', '==', uid));
     const snap = await getDocs(q);
-    return snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => (b.createdAt?.toMillis()||0) - (a.createdAt?.toMillis()||0));
+    return snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => (b.createdAt?.toMillis?.()||0) - (a.createdAt?.toMillis?.()||0));
   },
   async getAllOrders() {
     const snap = await getDocs(collection(firestore, 'orders'));
-    return snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => (b.createdAt?.toMillis()||0) - (a.createdAt?.toMillis()||0));
+    return snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => (b.createdAt?.toMillis?.()||0) - (a.createdAt?.toMillis?.()||0));
   },
-  async updateOrderStatus(orderId, status) { const allowed = ['pending', 'paid', 'shipped', 'canceled', 'completed']; if (!allowed.includes(status)) throw new Error('Status de pedido inválido.'); await setDoc(doc(firestore, 'orders', orderId), { status }, { merge: true }); },
+  async getPaymentEvents() { const snap = await getDocs(collection(firestore, 'paymentEvents')); return snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => (b.receivedAt?.toMillis?.()||0) - (a.receivedAt?.toMillis?.()||0)).slice(0,100); },
+  async updateOrderStatus(orderId, status) {
+    const allowed = ['shipped', 'canceled', 'completed'];
+    if (!allowed.includes(status)) throw new Error('Status permitido: enviado, cancelado ou concluído. Pagamento só é confirmado pelo Mercado Pago.');
+    await setDoc(doc(firestore, 'orders', orderId), { status }, { merge: true });
+  },
 
   // CLIENTES E REVIEWS
   async saveCustomerProfile(user, extra = {}) {
-    if (!user) return;
+    if (!user || !user.uid) throw new Error('É necessário estar autenticado para criar o perfil.');
     const userRef = doc(firestore, 'customers', user.uid);
-    const snap = await getDoc(userRef);
-    if (!snap.exists()) await setDoc(userRef, { email: user.email, name: extra.name || user.displayName || 'Cliente', createdAt: serverTimestamp() });
+    // A criação de conta e o listener de autenticação podem chamar esta função
+    // quase ao mesmo tempo. A transação evita duas tentativas concorrentes de create.
+    await runTransaction(firestore, async (transaction) => {
+      const snap = await transaction.get(userRef);
+      const requestedName = String(extra.name || '').trim().slice(0, 120);
+      if (snap.exists()) {
+        // Se o listener de autenticação criou o perfil primeiro com o nome padrão,
+        // a chamada do formulário pode completar o nome sem regravar campos protegidos.
+        if (requestedName.length >= 2 && snap.data().name !== requestedName) {
+          transaction.update(userRef, { name: requestedName, updatedAt: serverTimestamp() });
+        }
+        return;
+      }
+      transaction.set(userRef, {
+        email: String(user.email || '').trim().slice(0, 254),
+        name: (requestedName || String(user.displayName || 'Cliente').trim().slice(0, 120)),
+        createdAt: serverTimestamp()
+      });
+    });
   },
   async getCustomerProfile(uid) {
     if (!uid) return null;
