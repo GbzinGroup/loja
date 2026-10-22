@@ -5,6 +5,8 @@ import { store } from './store.js';
 import { $, appEl, brl, escapeHtml, toast } from './utils.js';
 import { renderAdminOrders } from './adminOrders.js';
 import { renderCustomers } from './customers.js';
+import { firestore } from './firebase-config.js';
+import { collection, getDocs, query, orderBy, limit, doc, getDoc, setDoc, addDoc, updateDoc, serverTimestamp, runTransaction } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 export async function renderAdmin(state, tab = 'dashboard') {
   if (!state.isAdmin) return window.navigate('login');
@@ -18,6 +20,11 @@ export async function renderAdmin(state, tab = 'dashboard') {
   else if (tab === 'customers') {
     content = await renderCustomers(state);
   } 
+  else if (tab === 'systemRequests') {
+    const snap = await getDocs(query(collection(firestore, 'systemRequests'), orderBy('createdAt', 'desc'), limit(100)));
+    const requests = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    content = `<div class="card system-card"><h2>Solicitações dos clientes</h2><p class="muted">Revise recargas, recompensas, resgates e pedidos de parceria. Aprovar uma solicitação não confirma um pagamento Pix.</p><div class="table-wrap"><table class="data-table"><thead><tr><th>Solicitação</th><th>Cliente</th><th>Detalhes</th><th>Status</th><th>Ações</th></tr></thead><tbody>${requests.length ? requests.map(r => `<tr><td><strong>${escapeHtml(r.title || r.kind || 'Solicitação')}</strong><br><small class="muted">${escapeHtml(r.kind || '')}</small></td><td><code>${escapeHtml(r.userId || '')}</code></td><td>${r.amount ? brl(r.amount) : ''}${r.note ? `<br>${escapeHtml(r.note)}` : ''}${r.code ? `<br>Código: ${escapeHtml(r.code)}` : ''}</td><td>${escapeHtml(r.status || 'pending')}</td><td><div class="flex gap-2 flex-wrap"><button class="btn btn-outline" onclick="window.updateSystemRequest('${r.id}','approved')">Aprovar</button><button class="btn btn-danger" onclick="window.updateSystemRequest('${r.id}','rejected')">Recusar</button></div></td></tr>`).join('') : '<tr><td colspan="5" class="muted">Nenhuma solicitação.</td></tr>'}</tbody></table></div></div><div class="card system-card"><h2>Ajuste manual de carteira</h2><p class="muted">Use apenas após conferir o motivo e os comprovantes. Toda operação gera uma transação de auditoria.</p><form id="walletAdjustForm" class="system-form"><label>UID do cliente<input id="walletUid" required maxlength="128"></label><label>Operação<select id="walletOperation"><option value="credit">Creditar</option><option value="debit">Debitar</option></select></label><label>Valor (R$)<input id="walletAdjustAmount" type="number" min="0.01" max="100000" step="0.01" required></label><label>Descrição<input id="walletAdjustDescription" maxlength="160" required></label><button class="btn btn-primary">Registrar ajuste</button></form></div>`;
+  }
   else if (tab === 'dashboard') {
     const orders = await store.getAllOrders();
     const totalRevenue = orders.filter(o => o.status === 'paid').reduce((s, o) => s + o.total, 0);
@@ -45,7 +52,7 @@ export async function renderAdmin(state, tab = 'dashboard') {
   else if (tab === 'products') {
     const rows = state.products.length ? state.products.map((p) => `
       <tr>
-        <td>${p.image ? `<img src="${p.image}" style="width: 44px; height: 44px; object-fit: cover; border-radius: 8px;">` : '🛍️'}</td>
+        <td>${p.image ? `<img src="${p.image}" style="width: 44px; height: 44px; object-fit: cover; border-radius: 8px;">` : ''}</td>
         <td>
           <strong>${escapeHtml(p.name)}</strong><br>
           <span class="muted" style="font-size: 0.75rem;">Cat: ${escapeHtml(p.category)} | Estoque: ${p.stock}</span>
@@ -128,6 +135,9 @@ export async function renderAdmin(state, tab = 'dashboard') {
         <button class="tab-btn ${tab === 'orders' ? 'active' : ''}" onclick="window.navigate('admin', {tab:'orders'})">Pedidos</button>
         <button class="tab-btn ${tab === 'coupons' ? 'active' : ''}" onclick="window.navigate('admin', {tab:'coupons'})">Cupons</button>
         <button class="tab-btn ${tab === 'customers' ? 'active' : ''}" onclick="window.navigate('admin', {tab:'customers'})">Clientes</button>
+        <button class="tab-btn ${tab === 'systemRequests' ? 'active' : ''}" onclick="window.navigate('admin', {tab:'systemRequests'})">Solicitações e carteira</button>
+        <button class="tab-btn" onclick="window.navigate('vip')">Clube VIP</button>
+        <button class="tab-btn" onclick="window.navigate('support')">Suporte</button>
       </div>
       ${content}
     </div>
@@ -137,6 +147,29 @@ export async function renderAdmin(state, tab = 'dashboard') {
   $('#maintenanceToggle')?.addEventListener('change', async (e) => {
     await store.saveMaintenance(e.target.checked);
     toast(`Manutenção ${e.target.checked ? 'Ativada' : 'Desativada'}`, 'success');
+  });
+
+  $('#walletAdjustForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const uid = $('#walletUid').value.trim();
+    const amount = Number($('#walletAdjustAmount').value);
+    const operation = $('#walletOperation').value;
+    const description = $('#walletAdjustDescription').value.trim();
+    if (!uid || !Number.isFinite(amount) || amount <= 0 || amount > 100000 || !description) return toast('Confira os dados do ajuste.', 'error');
+    try {
+      await runTransaction(firestore, async tx => {
+        const walletRef = doc(firestore, 'wallets', uid);
+        const snap = await tx.get(walletRef);
+        const balance = Number(snap.exists() ? snap.data().balance || 0 : 0);
+        const next = operation === 'credit' ? balance + amount : balance - amount;
+        if (next < 0) throw new Error('Saldo insuficiente para débito.');
+        tx.set(walletRef, { balance: Number(next.toFixed(2)), currency: 'BRL', updatedAt: serverTimestamp() }, { merge: true });
+        const transactionRef = doc(collection(firestore, 'transactions'));
+        tx.set(transactionRef, { userId: uid, amount: Number((operation === 'credit' ? amount : -amount).toFixed(2)), type: operation, description, status: 'confirmed', createdAt: serverTimestamp() });
+      });
+      toast('Ajuste registrado com auditoria.', 'success');
+      $('#walletAdjustForm').reset();
+    } catch (err) { console.error(err); toast(err.message || 'Não foi possível ajustar a carteira.', 'error'); }
   });
 
   $('#addCouponForm')?.addEventListener('submit', async (e) => {
@@ -159,6 +192,16 @@ export async function renderAdmin(state, tab = 'dashboard') {
 }
 
 // ================== FUNÇÕES GLOBAIS ==================
+// Atualização administrativa de solicitações, sem liberação automática de saldo.
+window.updateSystemRequest = async (id, status) => {
+  if (!['approved','rejected'].includes(status) || !confirm(`Marcar solicitação como ${status === 'approved' ? 'aprovada' : 'recusada'}?`)) return;
+  try {
+    await updateDoc(doc(firestore, 'systemRequests', id), { status, updatedAt: serverTimestamp() });
+    toast('Solicitação atualizada. Se for recarga, confira o pagamento antes de creditar a carteira.', 'success');
+    window.navigate('admin', { tab: 'systemRequests' });
+  } catch (err) { console.error(err); toast('Não foi possível atualizar a solicitação.', 'error'); }
+};
+
 window.deleteProduct = async (id) => {
   if (confirm('Deseja realmente excluir este produto?')) { 
     await store.deleteProduct(id); 
