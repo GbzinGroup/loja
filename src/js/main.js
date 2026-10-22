@@ -46,11 +46,11 @@ function renderHeader() {
 
   let account = '';
   if (state.user) {
-    if (state.isAdmin) account += `<button class="btn btn-outline" onclick="window.navigate('admin')"><span class="nav-icon icon-tools" aria-hidden="true"></span><span class="label">Painel</span></button>`;
-    account += `<button class="btn btn-outline" onclick="window.navigate('account')"><span class="nav-icon icon-account" aria-hidden="true"></span><span class="label">Conta</span></button>`;
+    if (state.isAdmin) account += `<button class="btn btn-outline" onclick="window.navigate('admin')"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 8h8M8 12h8M8 16h5"/></svg><span class="label">Painel</span></button>`;
+    account += `<button class="btn btn-outline" onclick="window.navigate('account')"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c.6-3.5 3.1-5.5 7-5.5s6.4 2 7 5.5"/></svg><span class="label">Conta</span></button>`;
     account += `<button class="btn btn-outline" onclick="window.signOutUser()"><span class="label">Sair</span></button>`;
   } else {
-    account = `<button class="btn btn-outline" onclick="window.navigate('login')"><span class="nav-icon icon-account" aria-hidden="true"></span><span class="label">Entrar</span></button>`;
+    account = `<button class="btn btn-outline" onclick="window.navigate('login')"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c.6-3.5 3.1-5.5 7-5.5s6.4 2 7 5.5"/></svg><span class="label">Entrar</span></button>`;
   }
 
   const count = Object.values(state.cart).reduce((s, i) => s + (i.qty || 0), 0);
@@ -67,9 +67,9 @@ function renderHeader() {
         <button onclick="window.navigate('faq')">Ajuda</button>
       </nav>
       <div class="header-actions">
-        <button class="btn btn-icon btn-outline" onclick="window.navigate('support')" title="Suporte" aria-label="Suporte"><span class="nav-icon icon-support" aria-hidden="true"></span></button>
-        <button class="btn btn-icon btn-outline" onclick="window.navigate('favorites')" title="Favoritos" aria-label="Favoritos"><span class="nav-icon icon-favorite" aria-hidden="true"></span></button>
-        <button class="btn btn-icon btn-outline" onclick="window.navigate('cart')" title="Carrinho" aria-label="Carrinho"><span class="nav-icon icon-cart" aria-hidden="true"></span>${count > 0 ? `<span class="badge">${count}</span>` : ''}</button>
+        <button class="btn btn-icon btn-outline" onclick="window.navigate('support')" title="Suporte" aria-label="Suporte"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="12" width="4" height="6" rx="2"/><rect x="17" y="12" width="4" height="6" rx="2"/><path d="M17 19c-1 1.2-2.6 1.8-5 1.8"/></svg></button>
+        <button class="btn btn-icon btn-outline" onclick="window.navigate('favorites')" title="Favoritos" aria-label="Favoritos"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 8.8c0 5-8.8 10-8.8 10s-8.8-5-8.8-10A4.8 4.8 0 0 1 12 6.1a4.8 4.8 0 0 1 8.8 2.7Z"/></svg></button>
+        <button class="btn btn-icon btn-outline" onclick="window.navigate('cart')" title="Carrinho" aria-label="Carrinho"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h2l2.2 10.2a2 2 0 0 0 2 1.6h8.4a2 2 0 0 0 1.9-1.4L21 8H6"/><circle cx="10" cy="20" r="1"/><circle cx="18" cy="20" r="1"/></svg>${count > 0 ? `<span class="badge">${count}</span>` : ''}</button>
         ${account}
       </div>
     </div>`;
