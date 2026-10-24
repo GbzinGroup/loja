@@ -6,8 +6,10 @@ export const escapeHtml = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(
 
 export const toast = (msg, type = 'info') => {
   const el = document.createElement('div');
-  el.className = `alert alert-${type}`;
-  Object.assign(el.style, { position: 'fixed', top: '84px', left: '50%', transform: 'translateX(-50%)', zIndex: '9999', boxShadow: 'var(--shadow-lg)', maxWidth: '90%', background: type === 'success' ? 'var(--success)' : type === 'error' ? 'var(--danger)' : 'var(--primary)', color: '#fff', padding: '12px 24px', borderRadius: '8px', fontWeight: '600', animation: 'slideDown 0.3s ease' });
+  el.className = `alert alert-${type} gbzin-toast`;
+  el.setAttribute('role', type === 'error' ? 'alert' : 'status');
+  el.setAttribute('aria-live', type === 'error' ? 'assertive' : 'polite');
+  Object.assign(el.style, { position: 'fixed', top: '84px', right: '18px', zIndex: '9999', boxShadow: '0 12px 34px rgba(0,0,0,.28)', width: 'max-content', maxWidth: 'min(440px, calc(100vw - 24px))', boxSizing: 'border-box', overflowWrap: 'anywhere', lineHeight: '1.5', border: '1px solid rgba(255,255,255,.16)', background: type === 'success' ? 'var(--success)' : type === 'error' ? 'var(--danger)' : 'var(--primary)', color: '#fff', padding: '12px 16px', borderRadius: '12px', fontWeight: '600', animation: 'slideDown 0.3s ease' });
   el.textContent = msg;
   document.body.appendChild(el);
   setTimeout(() => el.remove(), 3000);

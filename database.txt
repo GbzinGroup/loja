@@ -1,0 +1,99 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "maintenance": {
+      ".read": true,
+      ".write": "auth != null && (auth.token.email === 'gabrielcordeirosilva2010@gmail.com' || auth.token.email === '10pedrin0@gmail.com' || auth.token.email === 'lucaslyra875@gmail.com' || auth.token.email === 'gbzinstudio@gmail.com' || auth.token.email === 'voabernas@gmail.com')",
+      ".validate": "newData.isBoolean()"
+    },
+    "products": {
+      ".read": true,
+      "$productId": {
+        ".write": "auth != null && (auth.token.email === 'gabrielcordeirosilva2010@gmail.com' || auth.token.email === '10pedrin0@gmail.com' || auth.token.email === 'lucaslyra875@gmail.com' || auth.token.email === 'gbzinstudio@gmail.com' || auth.token.email === 'voabernas@gmail.com')",
+        ".validate": "!newData.exists() || (newData.hasChildren(['name','price','stock','category','image','active','salesCount','createdAt']) && newData.child('name').isString() && newData.child('name').val().length >= 1 && newData.child('name').val().length <= 160 && newData.child('price').isNumber() && newData.child('price').val() >= 0 && newData.child('price').val() <= 100000000 && newData.child('stock').isNumber() && newData.child('stock').val() >= 0 && newData.child('stock').val() % 1 == 0 && newData.child('category').isString() && newData.child('category').val().length <= 100 && newData.child('image').isString() && newData.child('image').val().length <= 3000000 && newData.child('active').isBoolean() && newData.child('salesCount').isNumber() && newData.child('salesCount').val() >= 0 && newData.child('salesCount').val() % 1 == 0 && newData.child('createdAt').isNumber() && newData.hasChildren())",
+        "name": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 160" },
+        "price": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100000000" },
+        "promoPrice": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100000000" },
+        "stock": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() % 1 == 0" },
+        "category": { ".validate": "newData.isString() && newData.val().length <= 100" },
+        "rarity": { ".validate": "newData.isString() && newData.val().length <= 40" },
+        "isLimited": { ".validate": "newData.isBoolean()" },
+        "expiresAt": { ".validate": "newData.isNumber() && newData.val() >= 0" },
+        "description": { ".validate": "newData.isString() && newData.val().length <= 5000" },
+        "image": { ".validate": "newData.isString() && newData.val().length <= 3000000" },
+        "active": { ".validate": "newData.isBoolean()" },
+        "salesCount": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() % 1 == 0" },
+        "createdAt": { ".validate": "newData.isNumber() && newData.val() >= 0" },
+        "fulfillmentType": { ".validate": "newData.isString() && (newData.val() === 'manual' || newData.val() === 'digital' || newData.val() === 'vip')" },
+        "vipPlanName": { ".validate": "newData.isString() && newData.val().length <= 100" },
+        "vipDurationDays": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 3650 && newData.val() % 1 == 0" },
+        "$other": { ".validate": false }
+      }
+    },
+    "settings": {
+      ".read": true,
+      ".write": "auth != null && (auth.token.email === 'gabrielcordeirosilva2010@gmail.com' || auth.token.email === '10pedrin0@gmail.com' || auth.token.email === 'lucaslyra875@gmail.com' || auth.token.email === 'gbzinstudio@gmail.com' || auth.token.email === 'voabernas@gmail.com')",
+      "storeName": { ".validate": "newData.isString() && newData.val().length <= 120" },
+      "pixKey": { ".validate": "newData.isString() && newData.val().length <= 250" },
+      "pixName": { ".validate": "newData.isString() && newData.val().length <= 160" },
+      "whatsapp": { ".validate": "newData.isString() && newData.val().length <= 40" },
+      "$other": { ".validate": false }
+    },
+    "coupons": {
+      ".read": "auth != null && (auth.token.email === 'gabrielcordeirosilva2010@gmail.com' || auth.token.email === '10pedrin0@gmail.com' || auth.token.email === 'lucaslyra875@gmail.com' || auth.token.email === 'gbzinstudio@gmail.com' || auth.token.email === 'voabernas@gmail.com')",
+      ".write": "auth != null && (auth.token.email === 'gabrielcordeirosilva2010@gmail.com' || auth.token.email === '10pedrin0@gmail.com' || auth.token.email === 'lucaslyra875@gmail.com' || auth.token.email === 'gbzinstudio@gmail.com' || auth.token.email === 'voabernas@gmail.com')",
+      "$couponCode": {
+        ".read": "data.child('active').val() === true",
+        ".validate": "!newData.exists() || (newData.hasChildren(['code','discount','type','active','showInAccount']) && newData.child('code').val() == $couponCode)",
+        "code": { ".validate": "newData.isString() && newData.val().matches(/^[A-Z0-9_-]{3,50}$/)" },
+        "discount": { ".validate": "newData.isNumber() && newData.val() > 0 && newData.val() <= 100000000" },
+        "type": { ".validate": "newData.isString() && (newData.val() === 'fixed' || newData.val() === 'percent') && (newData.val() !== 'percent' || newData.parent().child('discount').val() <= 100)" },
+        "active": { ".validate": "newData.isBoolean()" },
+        "showInAccount": { ".validate": "newData.isBoolean()" },
+        "$other": { ".validate": false }
+      }
+    },
+    "publicCoupons": {
+      ".read": true,
+      ".write": "auth != null && (auth.token.email === 'gabrielcordeirosilva2010@gmail.com' || auth.token.email === '10pedrin0@gmail.com' || auth.token.email === 'lucaslyra875@gmail.com' || auth.token.email === 'gbzinstudio@gmail.com' || auth.token.email === 'voabernas@gmail.com')",
+      "$couponCode": {
+        ".validate": "!newData.exists() || (newData.hasChildren(['code','discount','type','active','showInAccount']) && newData.child('code').val() === $couponCode && newData.child('active').val() === true && newData.child('showInAccount').val() === true)",
+        "code": { ".validate": "newData.isString() && newData.val().matches(/^[A-Z0-9_-]{3,50}$/)" },
+        "discount": { ".validate": "newData.isNumber() && newData.val() > 0 && newData.val() <= 100000000" },
+        "type": { ".validate": "newData.isString() && (newData.val() === 'fixed' || newData.val() === 'percent') && (newData.val() !== 'percent' || newData.parent().child('discount').val() <= 100)" },
+        "active": { ".validate": "newData.isBoolean() && newData.val() === true" },
+        "showInAccount": { ".validate": "newData.isBoolean() && newData.val() === true" },
+        "$other": { ".validate": false }
+      }
+    },
+    "carts": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid",
+        "$productId": {
+          ".validate": "!newData.exists() || newData.hasChildren(['qty'])",
+          "qty": { ".validate": "newData.isNumber() && newData.val() % 1 == 0 && newData.val() > 0 && newData.val() <= 99" },
+          "$other": { ".validate": false }
+        }
+      }
+    },
+    "favorites": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid",
+        "$productId": { ".validate": "!newData.exists() || (newData.isBoolean() && newData.val() === true)" }
+      }
+    },
+    "productDeliveries": {
+      ".read": "auth != null && (auth.token.email === 'gabrielcordeirosilva2010@gmail.com' || auth.token.email === '10pedrin0@gmail.com' || auth.token.email === 'lucaslyra875@gmail.com' || auth.token.email === 'gbzinstudio@gmail.com' || auth.token.email === 'voabernas@gmail.com')",
+      ".write": "auth != null && (auth.token.email === 'gabrielcordeirosilva2010@gmail.com' || auth.token.email === '10pedrin0@gmail.com' || auth.token.email === 'lucaslyra875@gmail.com' || auth.token.email === 'gbzinstudio@gmail.com' || auth.token.email === 'voabernas@gmail.com')",
+      "$productId": {
+        ".validate": "!newData.exists() || newData.hasChildren(['content','updatedAt'])",
+        "content": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 12000" },
+        "updatedAt": { ".validate": "newData.isNumber() && newData.val() >= 0" },
+        "$other": { ".validate": false }
+      }
+    }
+  }
+}

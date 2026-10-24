@@ -1,0 +1,21 @@
+{
+  "name": "Gbzin Shop",
+  "short_name": "Gbzin Shop",
+  "description": "Loja digital Gbzin Shop",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#040b16",
+  "theme_color": "#050d1b",
+  "icons": [
+    {
+      "src": "assets/web-app-manifest-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "assets/web-app-manifest-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

@@ -1,0 +1,249 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function admin() {
+      return signedIn() && request.auth.token.email in [
+        'gabrielcordeirosilva2010@gmail.com','10pedrin0@gmail.com',
+        'lucaslyra875@gmail.com','gbzinstudio@gmail.com','voabernas@gmail.com','Voabernas@gmail.com'
+      ];
+    }
+    function boundedString(data, key, max) {
+      return !(key in data) || (data[key] is string && data[key].size() <= max);
+    }
+    function validVipPlan(d) {
+      return d.keys().hasOnly(['name','price','durationDays','description','active','createdAt'])
+        && d.name is string && d.name.size() >= 2 && d.name.size() <= 100
+        && d.price is number && d.price >= 0
+        && d.durationDays is int && d.durationDays >= 1 && d.durationDays <= 3650
+        && d.description is string && d.description.size() <= 500
+        && d.active is bool;
+    }
+
+    match /customers/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || admin());
+      allow create: if signedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['email','name','createdAt','phone','photoURL','updatedAt'])
+        && request.resource.data.keys().hasAll(['email','name','createdAt'])
+        && request.resource.data.email is string
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.name is string
+        && request.resource.data.name.size() >= 2
+        && request.resource.data.name.size() <= 120
+        && request.resource.data.createdAt is timestamp
+        && boundedString(request.resource.data,'phone',40)
+        && boundedString(request.resource.data,'photoURL',2048)
+        && (!('updatedAt' in request.resource.data) || request.resource.data.updatedAt is timestamp);
+      allow update: if (signedIn() && request.auth.uid == uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name','phone','photoURL','updatedAt'])
+        && boundedString(request.resource.data,'name',120)
+        && boundedString(request.resource.data,'phone',40)
+        && boundedString(request.resource.data,'photoURL',2048)
+        && (!('updatedAt' in request.resource.data) || request.resource.data.updatedAt is timestamp))
+        || (admin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['rewardPoints','rewardPointsUpdatedAt'])
+        && request.resource.data.rewardPoints is int && request.resource.data.rewardPoints >= 0 && request.resource.data.rewardPoints <= 10000000
+        && request.resource.data.rewardPointsUpdatedAt is timestamp);
+      allow delete: if false;
+    }
+
+    match /orders/{orderId} {
+      // Pedidos e status de pagamento são gravados exclusivamente pelo backend confiável.
+      allow read: if signedIn() && (resource.data.userId == request.auth.uid || admin());
+      allow create, delete: if false;
+      // O painel não pode marcar um pedido como pago manualmente; somente a API/webhook verificado.
+      allow update: if admin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','adminNote','updatedAt','rewardType','rewardAmount'])
+        && request.resource.data.status in ['shipped','canceled','completed'];
+    }
+
+    match /paymentEvents/{eventId} {
+      allow read: if admin();
+      allow write: if false;
+    }
+
+    match /reviews/{productId}/items/{reviewId} {
+      allow read: if true;
+      allow create: if signedIn() && request.resource.data.userId == request.auth.uid
+        && request.resource.data.keys().hasOnly(['userId','userName','rating','comment','createdAt'])
+        && request.resource.data.rating is number && request.resource.data.rating >= 1
+        && request.resource.data.rating <= 5 && request.resource.data.rating % 1 == 0
+        && request.resource.data.comment is string && request.resource.data.comment.size() <= 1200
+        && request.resource.data.userName is string && request.resource.data.userName.size() <= 120;
+      allow update, delete: if false;
+    }
+
+    match /vipPlans/{planId} {
+      allow read: if (resource.data.active == true) || admin();
+      allow create: if admin() && validVipPlan(request.resource.data);
+      allow update: if admin() && validVipPlan(request.resource.data);
+      allow delete: if admin();
+    }
+
+    match /vipPurchaseRequests/{purchaseId} {
+      allow read: if signedIn() && (resource.data.userId == request.auth.uid || admin());
+      allow create: if signedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.planId is string
+        && exists(/databases/$(database)/documents/vipPlans/$(request.resource.data.planId))
+        && get(/databases/$(database)/documents/vipPlans/$(request.resource.data.planId)).data.active == true
+        && request.resource.data.planName == get(/databases/$(database)/documents/vipPlans/$(request.resource.data.planId)).data.name
+        && request.resource.data.price == get(/databases/$(database)/documents/vipPlans/$(request.resource.data.planId)).data.price
+        && request.resource.data.durationDays == get(/databases/$(database)/documents/vipPlans/$(request.resource.data.planId)).data.durationDays
+        && request.resource.data.planName is string
+        && request.resource.data.price is number && request.resource.data.price >= 0
+        && request.resource.data.durationDays is int && request.resource.data.durationDays >= 1
+        && request.resource.data.gameAccount is string && request.resource.data.gameAccount.size() >= 2 && request.resource.data.gameAccount.size() <= 64
+        && request.resource.data.paymentMethod is string && request.resource.data.paymentMethod.size() <= 30
+        && request.resource.data.keys().hasOnly(['userId','planId','planName','price','durationDays','gameAccount','paymentMethod','status','createdAt']);
+      allow update, delete: if false;
+    }
+
+    match /vipSubscriptions/{subscriptionId} {
+      allow read: if signedIn() && (resource.data.userId == request.auth.uid || admin());
+      allow create, update, delete: if false;
+    }
+
+    match /supportTickets/{ticketId} {
+      allow create: if signedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.subject is string && request.resource.data.subject.size() >= 3 && request.resource.data.subject.size() <= 120
+        && request.resource.data.category in ['Pedido','Pagamento','VIP','Produto digital','Conta','Outro']
+        && request.resource.data.status == 'open'
+        && request.resource.data.keys().hasOnly(['userId','subject','category','status','createdAt','updatedAt','lastMessageAt']);
+      allow read: if signedIn() && (resource.data.userId == request.auth.uid || admin());
+      allow update: if signedIn() && (resource.data.userId == request.auth.uid || admin())
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['updatedAt','lastMessageAt','status'])
+        && (admin() || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['updatedAt','lastMessageAt']));
+      allow delete: if admin();
+      match /messages/{messageId} {
+        function parentTicket() {
+          return get(/databases/$(database)/documents/supportTickets/$(ticketId)).data;
+        }
+        allow read: if signedIn() && (parentTicket().userId == request.auth.uid || admin());
+        allow create: if signedIn()
+          && (parentTicket().userId == request.auth.uid || admin())
+          && (admin() || parentTicket().status != 'closed')
+          && request.resource.data.senderUid == request.auth.uid
+          && request.resource.data.senderRole == (admin() ? 'staff' : 'customer')
+          && request.resource.data.text is string
+          && request.resource.data.text.size() >= 1 && request.resource.data.text.size() <= 3000
+          && request.resource.data.keys().hasOnly(['senderUid','senderRole','text','createdAt']);
+        allow update: if false;
+        allow delete: if admin();
+      }
+    }
+    // Carteira: o cliente só pode consultar o próprio saldo; créditos/débitos são server/admin-only.
+    match /wallets/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || admin());
+      allow create, update: if admin()
+        && request.resource.data.keys().hasOnly(['userId','balance','updatedAt','currency'])
+        && request.resource.data.balance is number && request.resource.data.balance >= 0
+        && (!('currency' in request.resource.data) || request.resource.data.currency == 'BRL')
+        && (!('userId' in request.resource.data) || request.resource.data.userId == uid);
+      allow delete: if admin();
+    }
+
+    // Extrato financeiro é somente leitura para o cliente; escrita por backend/admin.
+    match /transactions/{transactionId} {
+      allow read: if signedIn() && (resource.data.userId == request.auth.uid || admin());
+      allow create: if admin()
+        && request.resource.data.userId is string
+        && request.resource.data.amount is number
+        && request.resource.data.keys().hasOnly(['userId','amount','type','description','status','orderId','createdAt','balanceAfter','adminUid']);
+      allow update, delete: if admin();
+    }
+
+    // Solicitações de recarga, recompensa, parceiro e resgate não creditam saldo automaticamente.
+    match /systemRequests/{requestId} {
+      allow read: if signedIn() && (resource.data.userId == request.auth.uid || admin());
+      allow create: if signedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.kind in ['wallet_topup','order_payment_review','reward','partner','redeem_code']
+        && (!('rewardId' in request.resource.data) || (request.resource.data.rewardId is string && request.resource.data.rewardId.size() <= 160))
+        && (!('rewardCost' in request.resource.data) || (request.resource.data.rewardCost is int && request.resource.data.rewardCost >= 0 && request.resource.data.rewardCost <= 10000000))
+        && request.resource.data.keys().hasOnly(['userId','kind','title','amount','note','rewardType','rewardId','rewardCost','rewardAmount','code','promoCodeId','rewardDescription','status','createdAt'])
+        && (request.resource.data.kind != 'redeem_code' || (request.resource.data.code is string && request.resource.data.promoCodeId is string && exists(/databases/$(database)/documents/promoCodes/$(request.resource.data.promoCodeId)) && get(/databases/$(database)/documents/promoCodes/$(request.resource.data.promoCodeId)).data.code == request.resource.data.code && get(/databases/$(database)/documents/promoCodes/$(request.resource.data.promoCodeId)).data.active == true));
+      allow update: if admin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','adminNote','updatedAt','rewardType','rewardAmount'])
+        && request.resource.data.status in ['pending','approved','rejected','completed'];
+      allow delete: if admin();
+    }
+
+    // Catálogo de recompensas. Clientes só leem itens ativos; apenas administradores publicam/alteram.
+    match /rewardsCatalog/{rewardId} {
+      allow read: if admin() || resource.data.active == true;
+      allow create, update: if admin()
+        && request.resource.data.keys().hasOnly(['title','description','cost','type','active','createdAt','updatedAt'])
+        && request.resource.data.title is string && request.resource.data.title.size() >= 2 && request.resource.data.title.size() <= 120
+        && request.resource.data.description is string && request.resource.data.description.size() <= 500
+        && request.resource.data.cost is int && request.resource.data.cost >= 0 && request.resource.data.cost <= 10000000
+        && request.resource.data.type in ['coupon','vip','digital','other']
+        && request.resource.data.active is bool;
+      allow delete: if admin();
+    }
+    // Auditoria de pontos: leitura restrita ao titular e administradores; escrita por administrador.
+    match /pointsLedger/{entryId} {
+      allow read: if signedIn() && (resource.data.userId == request.auth.uid || admin());
+      allow create: if admin()
+        && request.resource.data.keys().hasOnly(['userId','amount','balanceAfter','reason','createdAt','adminUid'])
+        && request.resource.data.userId is string
+        && request.resource.data.amount is int
+        && request.resource.data.balanceAfter is int && request.resource.data.balanceAfter >= 0
+        && request.resource.data.reason is string && request.resource.data.reason.size() <= 160
+        && request.resource.data.createdAt is timestamp;
+      allow update, delete: if false;
+    }
+
+    // Códigos promocionais: somente administradores criam/alteram; clientes consultam apenas códigos ativos.
+    match /promoCodes/{promoCodeId} {
+      allow read: if admin() || (signedIn() && resource.data.active == true);
+      allow create: if admin()
+        && request.resource.data.keys().hasOnly(['code','description','rewardType','rewardAmount','active','maxUses','usedCount','createdAt','createdBy','expiresAt'])
+        && request.resource.data.code is string && request.resource.data.code.matches('^[A-Z0-9_-]{3,64}$')
+        && request.resource.data.description is string && request.resource.data.description.size() >= 2 && request.resource.data.description.size() <= 180
+        && (!('rewardType' in request.resource.data) || request.resource.data.rewardType in ['virtual_money','points','manual'])
+        && (!('rewardAmount' in request.resource.data) || (request.resource.data.rewardAmount is number && request.resource.data.rewardAmount >= 0 && request.resource.data.rewardAmount <= 100000))
+        && request.resource.data.active is bool
+        && request.resource.data.maxUses is int && request.resource.data.maxUses >= 1 && request.resource.data.maxUses <= 100000
+        && request.resource.data.usedCount == 0
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.createdBy is string
+        && (!('expiresAt' in request.resource.data) || request.resource.data.expiresAt is timestamp);
+      allow update: if admin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['active','usedCount','updatedAt'])
+        && request.resource.data.active is bool
+        && request.resource.data.usedCount is int && request.resource.data.usedCount >= resource.data.usedCount && request.resource.data.usedCount <= resource.data.maxUses;
+      allow delete: if admin();
+    }
+
+    // Notificações privadas por usuário; criação e edição reservadas à equipe/backend.
+    match /notifications/{notificationId} {
+      allow read: if signedIn() && (resource.data.userId == request.auth.uid || admin());
+      allow create: if admin()
+        && request.resource.data.userId is string
+        && request.resource.data.title is string && request.resource.data.title.size() <= 160
+        && request.resource.data.message is string && request.resource.data.message.size() <= 2000
+        && request.resource.data.keys().hasOnly(['userId','title','message','read','createdAt','type']);
+      allow update: if admin() || (signedIn() && resource.data.userId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']) && request.resource.data.read is bool);
+      allow delete: if admin();
+    }
+
+    // Campanhas públicas somente quando ativas; configuração é administrativa.
+    match /campaigns/{campaignId} {
+      allow read: if (resource.data.active == true) || admin();
+      allow create, update: if admin()
+        && request.resource.data.keys().hasOnly(['title','description','active','startsAt','endsAt','type','value','createdAt'])
+        && request.resource.data.title is string && request.resource.data.title.size() <= 160
+        && request.resource.data.description is string && request.resource.data.description.size() <= 2000
+        && request.resource.data.active is bool;
+      allow delete: if admin();
+    }
+
+    match /{document=**} { allow read, write: if false; }
+  }
+}

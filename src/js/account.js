@@ -1,7 +1,7 @@
 import { store } from './store.js';
 import { $, appEl, brl, escapeHtml, toast, formatDate } from './utils.js';
 import { firestore } from './firebase-config.js';
-import { doc, updateDoc } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import { doc, updateDoc, collection, getDocs, query, where, orderBy, limit } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 export async function renderAccount(state) {
   if (!state.user) return window.navigate('login'); 
@@ -9,12 +9,17 @@ export async function renderAccount(state) {
   try {
     const profile = await store.getCustomerProfile(state.user.uid); 
     const myOrders = await store.getMyOrders(state.user.uid);
-    const allCoupons = Object.values(state.coupons || {}).filter(c => c.active && c.showInAccount === true);
+    const notificationSnap = await getDocs(query(collection(firestore, 'notifications'), where('userId', '==', state.user.uid), limit(100))).catch(() => ({ docs: [] }));
+    const accountNotifications = notificationSnap.docs.map(d => ({id:d.id,...d.data()})).sort((a,b)=>(b.createdAt?.toMillis?.()||0)-(a.createdAt?.toMillis?.()||0)).slice(0,50);
+    const unreadNotifications = accountNotifications.filter(n => !n.read).length;
+    const allCoupons = Object.values(state.publicCoupons || {}).filter(c => c.active === true && c.showInAccount === true);
     const requestedTab = state.profileTab || 'data';
     const tab = requestedTab === 'coupons' && !allCoupons.length ? 'data' : requestedTab;
 
-    const totalPaid = myOrders.filter(o => o.status === 'paid').reduce((s, o) => s + o.total, 0);
+    const totalPaid = myOrders.filter(o => ['paid','shipped','completed'].includes(o.status)).reduce((s, o) => s + Number(o.total || 0), 0);
     const totalOrders = myOrders.length;
+    const pendingOrders = myOrders.filter(o => ['pending','awaiting_payment','payment_review'].includes(o.status)).length;
+    const favoritesCount = Object.keys(state.favorites || {}).length;
     const userName = profile?.name || state.user.email.split('@')[0];
     const initial = userName.charAt(0).toUpperCase();
 
@@ -34,24 +39,21 @@ export async function renderAccount(state) {
             </div>
             <div class="form-group">
               <label>Nome de Exibição</label>
-              <input type="text" id="editName" value="${escapeHtml(userName)}" />
+              <input type="text" id="editName" value="${escapeHtml(userName)}" maxlength="60" autocomplete="name" required />
             </div>
             <div class="form-group">
               <label>E-mail</label>
-              <input type="text" value="${state.user.email}" disabled />
+              <input type="email" value="${escapeHtml(state.user.email || '')}" disabled autocomplete="email" />
             </div>
             <button class="btn btn-primary mt-2" id="btnSaveName">Salvar Alterações</button>
           </div>
 
-          <div class="flex-col gap-4" style="flex: 1; min-width: 240px;">
-            <div class="card stat-card green">
-              <div class="label">Total Gasto</div>
-              <h2 style="color: var(--success);">${brl(totalPaid)}</h2>
-            </div>
-            <div class="card stat-card purple">
-              <div class="label">Pedidos Realizados</div>
-              <h2>${totalOrders}</h2>
-            </div>
+          <div class="account-overview-metrics" style="flex: 1.35; min-width: 260px;">
+            <div class="card stat-card green"><div class="label">Total confirmado</div><h2 style="color: var(--success);">${brl(totalPaid)}</h2><small class="muted">Compras pagas/concluídas</small></div>
+            <div class="card stat-card purple"><div class="label">Meus pedidos</div><h2>${totalOrders}</h2><small class="muted">Todos os status</small></div>
+            <div class="card stat-card warning"><div class="label">Em andamento</div><h2>${pendingOrders}</h2><small class="muted">Acompanhe atualizações</small></div>
+            <div class="card stat-card"><div class="label">Favoritos</div><h2>${favoritesCount}</h2><small class="muted">Itens salvos</small></div>
+            <div class="card system-card account-shortcut"><h3>Central da sua conta</h3><p class="muted">Acesse carteira, pontos, notificações, histórico financeiro e outros recursos.</p><button class="btn btn-primary" onclick="window.navigate('systems',{tab:'overview'})">Abrir central da conta</button></div>
           </div>
         </div>
       `;
@@ -134,10 +136,15 @@ export async function renderAccount(state) {
                 <div style="font-size: 1.2rem; font-weight: 800; color: var(--primary);">${c.code}</div>
                 <div class="muted">${c.type === 'percent' ? `${c.discount}% OFF` : `${brl(c.discount)} OFF`}</div>
               </div>
-              <button class="btn btn-outline" onclick="navigator.clipboard.writeText('${c.code}'); alert('Copiado!')">Copiar</button>
+              <button class="btn btn-outline account-copy-coupon" type="button" data-coupon-code="${escapeHtml(c.code)}">Copiar código</button>
             </div>
           `).join('')}
         </div>` : `<div class="empty-state"><h3>Nenhum cupom ativo</h3></div>`;
+    }
+
+    // ABA: MENSAGENS E AVISOS
+    else if (tab === 'notifications') {
+      content = accountNotifications.length ? `<div class="card system-card"><div class="flex-between flex-wrap gap-2"><div><h3>Mensagens e avisos</h3><p class="muted">Comunicados enviados pela equipe da Gbzin Shop, incluindo avisos de entrada.</p></div><span class="system-pill">${unreadNotifications} não lida(s)</span></div><div class="system-list">${accountNotifications.map(n=>`<article class="system-list-row"><div><strong>${escapeHtml(n.title||'Aviso da loja')}</strong><small>${escapeHtml(n.message||'')}<br>${formatDate(n.createdAt)}</small></div><span class="system-pill ${n.read?'':'status-success'}">${n.read?'Lida':`<button class="btn btn-outline account-mark-notification" type="button" data-notification-id="${escapeHtml(n.id)}">Marcar como lida</button>`}</span></article>`).join('')}</div></div>` : `<div class="card system-card empty-state"><h3>Nenhuma mensagem por enquanto</h3><p>Quando a equipe enviar um aviso ou comunicado, ele aparecerá aqui.</p></div>`;
     }
 
     // RENDER PRINCIPAL DA CONTA
@@ -147,7 +154,7 @@ export async function renderAccount(state) {
         <div class="account-header">
           <div>
             <h2 style="font-size: 2rem; margin-bottom: 4px;">Olá, ${escapeHtml(userName.split(' ')[0])} </h2>
-            <p class="muted">Gerencie seus dados, pedidos e favoritos.</p>
+            <p class="muted">Gerencie seus dados, acompanhe pedidos e organize seus benefícios em um só lugar.</p>
           </div>
           <button class="btn btn-outline" onclick="window.signOutUser()" style="color: var(--danger); border-color: var(--danger);">Sair da Conta</button>
         </div>
@@ -157,6 +164,8 @@ export async function renderAccount(state) {
           <button class="tab-btn ${tab === 'orders' ? 'active' : ''}" onclick="window.setTab('orders')">Pedidos</button>
           <button class="tab-btn ${tab === 'library' ? 'active' : ''}" onclick="window.setTab('library')">Biblioteca</button>
           <button class="tab-btn ${tab === 'favorites' ? 'active' : ''}" onclick="window.setTab('favorites')">Favoritos</button>
+          <button class="tab-btn" type="button" onclick="window.navigate('systems',{tab:'referrals'})">Afiliados</button>
+          <button class="tab-btn ${tab === 'notifications' ? 'active' : ''}" onclick="window.setTab('notifications')">Mensagens e avisos${unreadNotifications ? ` (${unreadNotifications})` : ''}</button>
           ${allCoupons.length ? `<button class="tab-btn ${tab === 'coupons' ? 'active' : ''}" onclick="window.setTab('coupons')">Cupons</button>` : ''}
         </div>
 
@@ -164,14 +173,34 @@ export async function renderAccount(state) {
       </div>
     `;
 
+    appEl().querySelectorAll('.account-mark-notification').forEach(button => button.addEventListener('click', async () => {
+      const id = button.dataset.notificationId; if (!id) return;
+      button.disabled = true;
+      try { await updateDoc(doc(firestore, 'notifications', id), { read: true }); toast('Mensagem marcada como lida.', 'success'); renderAccount(state); }
+      catch (err) { console.error('[Notificações]', err); button.disabled = false; toast('Não foi possível atualizar a mensagem. Confira as regras Firestore.', 'error'); }
+    }));
+
+    appEl().querySelectorAll('.account-copy-coupon').forEach(button => button.addEventListener('click', async () => {
+      const code = button.dataset.couponCode || '';
+      try {
+        await navigator.clipboard.writeText(code);
+        toast('Código do cupom copiado.', 'success');
+      } catch {
+        toast(`Código do cupom: ${code}`, 'info');
+      }
+    }));
+
     $('#btnSaveName')?.addEventListener('click', async () => {
       const newName = $('#editName').value.trim();
       if (!newName) return toast('O nome não pode ser vazio.', 'error');
+      if (newName.length > 60) return toast('Use até 60 caracteres no nome.', 'error');
+      const saveButton = $('#btnSaveName');
+      if (saveButton) { saveButton.disabled = true; saveButton.textContent = 'Salvando…'; }
       try {
         await updateDoc(doc(firestore, 'customers', state.user.uid), { name: newName });
         toast('Nome atualizado!', 'success');
         renderAccount(state); 
-      } catch (err) { toast('Erro ao atualizar.', 'error'); }
+      } catch (err) { console.error('[Perfil] Falha ao salvar nome:', err); toast('Não foi possível atualizar seu perfil. Confira sua conexão e as regras do Firestore.', 'error'); } finally { const saveButton = $('#btnSaveName'); if (saveButton) { saveButton.disabled = false; saveButton.textContent = 'Salvar Alterações'; } }
     });
 
   } catch (error) {

@@ -1,6 +1,6 @@
 import { $, appEl, escapeHtml, toast, formatDate } from './utils.js';
 import { firestore, auth } from './firebase-config.js';
-import { collection, addDoc, getDocs, query, where, orderBy, doc, getDoc, setDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import { collection, addDoc, getDocs, query, where, orderBy, doc, getDoc, setDoc, deleteDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 let busy = false;
 
@@ -24,8 +24,26 @@ export async function renderSupport(state) {
       const q = isStaff ? collection(firestore, 'supportTickets') : query(collection(firestore, 'supportTickets'), where('userId', '==', user.uid));
       const snap = await getDocs(q);
       const tickets = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => (b.updatedAt?.toMillis?.() || 0) - (a.updatedAt?.toMillis?.() || 0));
-      listEl.innerHTML = tickets.length ? tickets.map(t => `<button class="ticket-list-item" type="button" data-ticket="${escapeHtml(t.id)}"><span class="ticket-list-top"><strong>${escapeHtml(t.subject || 'Chamado')}</strong><span class="status-pill ${t.status === 'closed' ? 'status-canceled' : 'status-paid'}">${t.status === 'closed' ? 'Encerrado' : 'Aberto'}</span></span><span class="muted">${escapeHtml(t.category || 'Outro')}${isStaff ? ` · Cliente ${escapeHtml(String(t.userId || '').slice(0,8))}` : ''}</span><span class="ticket-list-date">${escapeHtml(formatDate(t.updatedAt || t.createdAt))}</span></button>`).join('') : `<div class="empty-state"><h3>${isStaff ? 'Nenhum chamado recebido' : 'Você ainda não abriu chamados'}</h3><p class="muted">${isStaff ? 'Novas solicitações aparecerão aqui.' : 'Quando precisar de ajuda, abra um chamado nesta página.'}</p></div>`;
+      listEl.innerHTML = tickets.length ? tickets.map(t => `<div class="ticket-list-row"><button class="ticket-list-item" type="button" data-ticket="${escapeHtml(t.id)}"><span class="ticket-list-top"><strong>${escapeHtml(t.subject || 'Chamado')}</strong><span class="status-pill ${t.status === 'closed' ? 'status-canceled' : 'status-paid'}">${t.status === 'closed' ? 'Encerrado' : 'Aberto'}</span></span><span class="muted">${escapeHtml(t.category || 'Outro')}${isStaff ? ` · Cliente ${escapeHtml(String(t.userId || '').slice(0,8))}` : ''}</span><span class="ticket-list-date">${escapeHtml(formatDate(t.updatedAt || t.createdAt))}</span></button>${isStaff ? `<button class="btn btn-danger ticket-delete-btn" type="button" data-delete-ticket="${escapeHtml(t.id)}" aria-label="Excluir chamado">Excluir</button>` : ''}</div>`).join('') : `<div class="empty-state"><h3>${isStaff ? 'Nenhum chamado recebido' : 'Você ainda não abriu chamados'}</h3><p class="muted">${isStaff ? 'Novas solicitações aparecerão aqui.' : 'Quando precisar de ajuda, abra um chamado nesta página.'}</p></div>`;
       listEl.querySelectorAll('[data-ticket]').forEach(btn => btn.addEventListener('click', () => openTicket(btn.dataset.ticket)));
+      if (isStaff) listEl.querySelectorAll('[data-delete-ticket]').forEach(btn => btn.addEventListener('click', async (event) => {
+        event.preventDefault(); event.stopPropagation();
+        const ticketId = btn.dataset.deleteTicket;
+        if (!ticketId || !confirm('Excluir este chamado e todas as mensagens? Esta ação não pode ser desfeita.')) return;
+        btn.disabled = true;
+        try {
+          const messagesSnap = await getDocs(collection(firestore, 'supportTickets', ticketId, 'messages'));
+          await Promise.all(messagesSnap.docs.map(messageDoc => deleteDoc(messageDoc.ref)));
+          await deleteDoc(doc(firestore, 'supportTickets', ticketId));
+          $('#ticketConversation').hidden = true;
+          toast('Chamado e mensagens excluídos.', 'success');
+          await loadTickets();
+        } catch (err) {
+          console.error('[Suporte: exclusão]', err);
+          toast('Não foi possível excluir. Publique as regras do Firestore atualizadas.', 'error');
+          btn.disabled = false;
+        }
+      }));
     } catch (e) {
       console.error('[Suporte: lista]', e);
       listEl.innerHTML = '<p class="muted">Não foi possível carregar os chamados. Confira se firestore.rules foi publicado no projeto correto.</p>';

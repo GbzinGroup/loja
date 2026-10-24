@@ -26,6 +26,7 @@ export const store = {
   // CARRINHO E FAVORITOS
   listenCart(uid, cb) { if (!uid) return () => {}; return onValue(ref(db, `carts/${uid}`), (s) => cb(s.val() || {})); },
   async updateCart(uid, data) { await set(ref(db, `carts/${uid}`), data); },
+  async getCart(uid) { const snapshot = await get(ref(db, `carts/${uid}`)); return snapshot.exists() ? (snapshot.val() || {}) : {}; },
   listenFavorites(uid, cb) { if (!uid) return () => {}; return onValue(ref(db, `favorites/${uid}`), (s) => cb(s.val() || {})); },
   async toggleFavorite(uid, pid, isFav) {
     const r = ref(db, `favorites/${uid}/${pid}`);
@@ -39,28 +40,90 @@ export const store = {
   async saveMaintenance(status) { await set(ref(db, 'maintenance'), status); },
 
   // CUPONS
-  listenCoupons(cb) { return onValue(ref(db, 'coupons'), (s) => cb(s.val() || {})); },
-  async addCoupon(code, discount, type) { 
+  // A coleção completa é reservada ao painel. A lista pública contém somente
+  // cupons explicitamente publicados pelo administrador.
+  listenCoupons(cb, onError = () => {}) {
+    return onValue(ref(db, 'coupons'), (s) => cb(s.val() || {}), onError);
+  },
+  listenPublicCoupons(cb, onError = () => {}) {
+    return onValue(ref(db, 'publicCoupons'), (s) => cb(s.val() || {}), (err) => {
+      console.warn('[Gbzin Shop] Não foi possível carregar cupons públicos:', err?.code || err?.message || err);
+      onError(err);
+    });
+  },
+  async addCoupon(code, discount, type) {
     const normalized = String(code || '').trim().toUpperCase();
-    if (!/^[A-Z0-9_-]{3,50}$/.test(normalized)) throw new Error('Use um código de 3 a 50 caracteres: letras, números, hífen ou underline.');
-    if (!Number.isFinite(Number(discount)) || Number(discount) <= 0) throw new Error('O desconto precisa ser maior que zero.');
+    const amount = Number(discount);
+    if (!/^[A-Z0-9_-]{3,50}$/.test(normalized)) throw new Error('Use de 3 a 50 caracteres: letras, números, hífen ou underline.');
+    if (!Number.isFinite(amount) || amount <= 0 || amount > 100000000) throw new Error('Informe um desconto maior que zero e dentro do limite.');
     if (!['fixed', 'percent'].includes(type)) throw new Error('Tipo de desconto inválido.');
-    if (type === 'percent' && Number(discount) > 100) throw new Error('O desconto percentual não pode passar de 100%.');
-    await set(ref(db, `coupons/${normalized}`), { code: normalized, discount: Number(discount), type, active: true, showInAccount: false }); 
+    if (type === 'percent' && amount > 100) throw new Error('O desconto percentual não pode passar de 100%.');
+    const couponRef = ref(db, `coupons/${normalized}`);
+    const existing = await get(couponRef);
+    if (existing.exists()) throw new Error('Já existe um cupom com esse código.');
+    await set(couponRef, { code: normalized, discount: amount, type, active: true, showInAccount: false });
+  },
+  async syncPublicCoupon(code, coupon) {
+    const normalized = String(code || '').trim().toUpperCase();
+    if (!normalized) throw new Error('Código de cupom inválido.');
+    const publicRef = ref(db, `publicCoupons/${normalized}`);
+    if (coupon && coupon.active === true && coupon.showInAccount === true) {
+      await set(publicRef, {
+        code: normalized,
+        discount: Number(coupon.discount),
+        type: coupon.type,
+        active: true,
+        showInAccount: true
+      });
+    } else {
+      await remove(publicRef);
+    }
   },
   async setCouponAccountVisibility(code, visible) {
     const normalized = String(code || '').trim().toUpperCase();
-    if (!normalized) throw new Error('Código de cupom inválido.');
-    await update(ref(db, `coupons/${normalized}`), { showInAccount: Boolean(visible) });
+    if (!/^[A-Z0-9_-]{3,50}$/.test(normalized)) throw new Error('Código de cupom inválido.');
+    const couponRef = ref(db, `coupons/${normalized}`);
+    const snap = await get(couponRef);
+    if (!snap.exists()) throw new Error('Este cupom não existe mais.');
+    const coupon = { ...snap.val(), showInAccount: Boolean(visible) };
+    await update(couponRef, { showInAccount: Boolean(visible) });
+    await this.syncPublicCoupon(normalized, coupon);
+  },
+  async setCouponActive(code, active) {
+    const normalized = String(code || '').trim().toUpperCase();
+    if (!/^[A-Z0-9_-]{3,50}$/.test(normalized)) throw new Error('Código de cupom inválido.');
+    const couponRef = ref(db, `coupons/${normalized}`);
+    const snap = await get(couponRef);
+    if (!snap.exists()) throw new Error('Este cupom não existe mais.');
+    const coupon = { ...snap.val(), active: Boolean(active) };
+    await update(couponRef, { active: Boolean(active) });
+    await this.syncPublicCoupon(normalized, coupon);
   },
   async removeCoupon(code) {
-    await remove(ref(db, `coupons/${code.toUpperCase()}`));
+    const normalized = String(code || '').trim().toUpperCase();
+    if (!/^[A-Z0-9_-]{3,50}$/.test(normalized)) throw new Error('Código de cupom inválido.');
+    await Promise.all([
+      remove(ref(db, `coupons/${normalized}`)),
+      remove(ref(db, `publicCoupons/${normalized}`))
+    ]);
   },
   async validateCoupon(code) {
+    const normalized = String(code || '').trim().toUpperCase();
+    if (!/^[A-Z0-9_-]{3,50}$/.test(normalized)) return null;
     try {
-      const snap = await get(ref(db, `coupons/${code.toUpperCase()}`));
-      return snap.exists() ? snap.val() : null;
-    } catch { return null; }
+      const snap = await get(ref(db, `coupons/${normalized}`));
+      if (!snap.exists()) return null;
+      const coupon = snap.val();
+      const amount = Number(coupon.discount);
+      if (coupon.code !== normalized || coupon.active !== true ||
+          !Number.isFinite(amount) || amount <= 0 ||
+          !['fixed', 'percent'].includes(coupon.type) ||
+          (coupon.type === 'percent' && amount > 100)) return null;
+      return { code: normalized, discount: amount, type: coupon.type, active: true };
+    } catch (error) {
+      console.warn('[Gbzin Shop] Validação de cupom indisponível:', error?.code || error?.message || error);
+      return null;
+    }
   },
 
   // PEDIDOS — criação e confirmação de pagamento são feitas apenas pelo backend.
@@ -83,6 +146,11 @@ export const store = {
   },
 
   // CLIENTES E REVIEWS
+  async getAllCustomers() {
+    const snap = await getDocs(collection(firestore, 'customers'));
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR'));
+  },
   async saveCustomerProfile(user, extra = {}) {
     if (!user || !user.uid) throw new Error('É necessário estar autenticado para criar o perfil.');
     const userRef = doc(firestore, 'customers', user.uid);
