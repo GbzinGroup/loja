@@ -82,7 +82,7 @@ function renderHeader() {
 
   headerEl().innerHTML = `
     <div class="header-inner">
-      <button class="logo" type="button" onclick="window.navigate('home')" aria-label="Voltar à loja"><img src="assets/gbzin-mark-white.png" alt=""><span>${escapeHtml(state.settings.storeName)}</span></button>
+      <button class="logo" type="button" onclick="window.navigate('home')" aria-label="Voltar à loja"><img src="assets/gbzin-mark-blue.png" alt=""><span>${escapeHtml(state.settings.storeName)}</span></button>
       <nav class="main-nav" aria-label="Navegação principal">
         <button onclick="window.navigate('home')">Loja</button>
         <button onclick="window.navigate('promotions')">Ofertas</button>

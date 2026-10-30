@@ -925,7 +925,7 @@ a{color:#29b5ff}a:hover{color:#8bdeff}
 .header-inner{min-height:76px;gap:22px;padding-top:12px;padding-bottom:12px}
 .logo{display:flex;align-items:center;gap:10px;border:0;background:none;padding:0;cursor:pointer;color:var(--text);-webkit-text-fill-color:initial;background-clip:initial;font-size:1.2rem;letter-spacing:-.04em;font-weight:900;white-space:nowrap}
 .logo img{width:38px;height:38px;object-fit:contain;filter:drop-shadow(0 0 12px rgba(22,141,255,.22))}
-.logo span{background:linear-gradient(120deg,#f4f8ff 20%,#2db4ff 85%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.logo span{background:linear-gradient(120deg,#168dff 10%,#2db4ff 55%,#65d4ff 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
 .main-nav{display:flex;align-items:center;gap:clamp(10px,1.8vw,25px);flex-wrap:wrap}
 .main-nav button,.footer-links button{background:none;border:0;color:#c1d1e6;font:inherit;font-size:12px;cursor:pointer;transition:color .2s}
 .main-nav button:hover,.footer-links button:hover{color:#32baff}
